@@ -1,0 +1,27 @@
+name = "xpense-ai"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# shared/schemas.ts lives outside this folder; make sure it bundles this package's zod.
+[alias]
+"zod" = "./node_modules/zod"
+
+[vars]
+FREE_TRIAL_SCANS = "3"
+PRO_MONTHLY_SCANS = "300"
+
+# Create with: npx wrangler kv namespace create USAGE  — then paste the id here.
+[[kv_namespaces]]
+binding = "USAGE"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Burst protection: at most 10 AI requests per install per minute.
+[[ratelimits]]
+name = "BURST_LIMITER"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# Secrets (never commit these):
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put REVENUECAT_SECRET_KEY
