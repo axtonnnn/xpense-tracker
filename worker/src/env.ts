@@ -18,7 +18,10 @@ export interface Env {
   /** Optional Workers rate-limit binding for burst protection. */
   BURST_LIMITER?: RateLimiter;
   FREE_TRIAL_SCANS?: string;
+  /** Pro fair-use caps per calendar month. */
   PRO_MONTHLY_SCANS?: string;
+  PRO_MONTHLY_CHECKS?: string;
+  PRO_MONTHLY_REVIEWS?: string;
   /** Local development only: treat every install as Pro. Never set this in production. */
   ALLOW_ALL_PRO?: string;
 }

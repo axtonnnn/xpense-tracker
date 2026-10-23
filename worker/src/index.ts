@@ -11,9 +11,11 @@ export type Deps = {
   ai: (env: Env) => AIProvider;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  keepaliveMs?: number;
 };
 
 const MAX_BODY_BYTES = 4_000_000;
+const KEEPALIVE_MS = 10_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CORS = {
@@ -34,15 +36,50 @@ const ROUTES: Record<string, Route> = {
   '/v1/review': { feature: 'review', schema: ReviewRequestSchema, run: (ai, body) => ai.monthlyReview(body) },
 };
 
+// no-transform stops Cloudflare from compressing (and so buffering) the keepalive bytes below.
+const JSON_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, no-transform', ...CORS };
+
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...CORS },
-  });
+  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }
 
+const errorBody = (status: number, code: string, message: string) => ({ error: { code, message, status } });
+
 function error(status: number, code: string, message: string): Response {
-  return json({ error: { code, message } }, status);
+  return json(errorBody(status, code, message), status);
+}
+
+/**
+ * At max effort Claude can think for a minute or more, but iPhones drop a request that receives no
+ * bytes for 60 s. So AI answers start streaming at once: a space every 10 seconds (leading
+ * whitespace is valid JSON), then the JSON. Errors from this point on arrive in the body as
+ * { error: { code, message, status } } because the 200 status has already been sent.
+ */
+function slowJson(work: () => Promise<unknown>, keepaliveMs: number): Response {
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const timer = setInterval(() => {
+    writer.write(encoder.encode(' ')).catch(() => undefined);
+  }, keepaliveMs);
+  void (async () => {
+    let body: unknown;
+    try {
+      body = await work();
+    } catch (e) {
+      console.error('[ai]', e);
+      body = errorBody(502, 'ai_error', 'The AI service had a problem. Please try again.');
+    } finally {
+      clearInterval(timer);
+    }
+    try {
+      await writer.write(encoder.encode(JSON.stringify(body)));
+      await writer.close();
+    } catch {
+      // The phone disconnected; nothing left to do.
+    }
+  })();
+  return new Response(readable, { status: 200, headers: JSON_HEADERS });
 }
 
 export function createHandler(deps: Deps) {
@@ -85,18 +122,18 @@ export function createHandler(deps: Deps) {
     const access = await checkAccess(env, installId, route.feature, { fetchImpl, now: when });
     if (!access.ok) return error(access.status, access.code, access.message);
 
-    let result: unknown;
-    try {
-      result = await route.run(deps.ai(env), parsed.data as never);
-    } catch (e) {
-      if (e instanceof AIError) return error(e.status, e.code, e.message);
-      console.error('[ai]', e);
-      return error(502, 'ai_error', 'The AI service had a problem. Please try again.');
-    }
-
-    const usage = await recordUsage(env, installId, route.feature, access, when);
-    if (route.feature === 'scan') return json({ receipt: result, trial_remaining: usage.trialRemaining });
-    return json({ result });
+    return slowJson(async () => {
+      let result: unknown;
+      try {
+        result = await route.run(deps.ai(env), parsed.data as never);
+      } catch (e) {
+        if (e instanceof AIError) return errorBody(e.status, e.code, e.message);
+        throw e;
+      }
+      // Only successful answers count against the trial or the monthly cap.
+      const usage = await recordUsage(env, installId, route.feature, access, when);
+      return route.feature === 'scan' ? { receipt: result, trial_remaining: usage.trialRemaining } : { result };
+    }, deps.keepaliveMs ?? KEEPALIVE_MS);
   };
 }
 

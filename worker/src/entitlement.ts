@@ -12,10 +12,13 @@ export const ENTITLEMENT = 'pro';
 const PRO_CACHE_TTL = 600; // seconds; only "is Pro" is cached so a new purchase works immediately
 const MONTH_TTL = 60 * 60 * 24 * 40;
 
-/** Fair-use caps per Pro install per calendar month. */
+/** Fair-use caps per Pro install per calendar month (override with the PRO_MONTHLY_* vars). */
+const DEFAULT_CAPS: Record<Feature, number> = { scan: 300, check: 300, review: 30 };
+
 function monthlyCap(env: Env, feature: Feature): number {
-  if (feature === 'scan') return Number(env.PRO_MONTHLY_SCANS ?? 300);
-  return feature === 'check' ? 300 : 30;
+  const raw = { scan: env.PRO_MONTHLY_SCANS, check: env.PRO_MONTHLY_CHECKS, review: env.PRO_MONTHLY_REVIEWS }[feature];
+  const n = Number(raw ?? DEFAULT_CAPS[feature]);
+  return Number.isFinite(n) ? n : DEFAULT_CAPS[feature];
 }
 
 const trialLimit = (env: Env) => Number(env.FREE_TRIAL_SCANS ?? 3);

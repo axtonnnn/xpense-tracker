@@ -9,7 +9,11 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 FREE_TRIAL_SCANS = "3"
+# Pro fair-use caps per calendar month. At max effort each scan costs ≈ $0.002–0.008,
+# so 300 scans is at most ≈ $2.40 for an extreme user; lower these to tighten worst-case cost.
 PRO_MONTHLY_SCANS = "300"
+PRO_MONTHLY_CHECKS = "300"
+PRO_MONTHLY_REVIEWS = "30"
 
 # Create with: npx wrangler kv namespace create USAGE  — then paste the id here.
 [[kv_namespaces]]

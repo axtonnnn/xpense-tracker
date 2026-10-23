@@ -35,7 +35,8 @@ Phone (Expo app)                              Cloudflare Worker (worker/)       
  RevenueCat SDK (buy / restore Pro) ─────────► RevenueCat REST (is this install Pro?)
 ```
 
-- **AI model:** Claude Haiku 5.5 at low effort with structured outputs. It costs about **$0.0005 per receipt** (about 2,000 scans per $1).
+- **AI model:** Claude Haiku 5.5 at **max effort** (it thinks as hard as it can before answering) with structured outputs. That costs about **$0.002–0.008 per receipt**, and answers often take 10–60 seconds.
+- **Slow answers stay connected:** the Worker starts replying at once and sends a space every 10 seconds while Claude thinks, because iPhones drop requests that go quiet for 60 seconds. AI errors after that point arrive in the JSON body.
 - **Your API key never ships in the app.** The Worker holds it, checks Pro status with RevenueCat on the server (so a modified app can't unlock AI), and applies trial, fair-use and burst limits. It stores no photos or results.
 - **Anonymous by default:** a random install ID (shown in Settings → About → Support ID) is the RevenueCat app user ID and the key for usage counters.
 
@@ -141,11 +142,13 @@ No Mac is needed: EAS builds and signs in the cloud. Real purchases can't be tes
 | Item | Cost |
 |---|---|
 | Apple Developer Program | $99 / year |
-| Claude Haiku 5.5 | ≈ $0.0005 per receipt scan, ≈ $0.0001 per buy check |
+| Claude Haiku 5.5 at max effort | ≈ $0.002–0.008 per receipt scan, ≈ $0.001–0.003 per buy check or review |
 | Cloudflare Workers + KV | free tier covers 100k requests/day |
 | RevenueCat | free tier for small apps (check current pricing) |
 
-A heavy Pro user (60 scans a month) costs about **$0.03/month** in AI.
+A heavy Pro user (60 scans a month) costs about **$0.10–0.50/month** in AI. These are estimates: at max effort the thinking length varies by receipt, so check real costs in the Anthropic Console after launch.
+
+The Pro fair-use caps cap your worst case. An extreme user who maxes out all three caps (300 scans, 300 checks, 30 reviews) could cost up to about $3.40 a month. That is more than the $2.99 monthly price after Apple's cut. Lower `PRO_MONTHLY_SCANS`, `PRO_MONTHLY_CHECKS` or `PRO_MONTHLY_REVIEWS` in `worker/wrangler.toml` if you want a tighter ceiling, and update `docs/terms.md` to match. To go back to the cheapest setting, change `EFFORT` in `worker/src/ai/claude.ts` to `'low'`.
 
 ## Configuration reference
 
@@ -154,5 +157,5 @@ A heavy Pro user (60 scans a month) costs about **$0.03/month** in AI.
 | `app.json` → `extra` | `apiUrl` | Worker URL (`demo` = sample answers in dev builds) |
 | | `revenueCatIosKey`, `revenueCatAndroidKey` | RevenueCat public SDK keys |
 | | `privacyUrl`, `termsUrl` | Hosted policy pages |
-| `worker/wrangler.toml` | `FREE_TRIAL_SCANS`, `PRO_MONTHLY_SCANS` | Trial size and Pro fair-use cap |
+| `worker/wrangler.toml` | `FREE_TRIAL_SCANS`, `PRO_MONTHLY_SCANS`, `PRO_MONTHLY_CHECKS`, `PRO_MONTHLY_REVIEWS` | Trial size and Pro fair-use caps |
 | Worker secrets | `ANTHROPIC_API_KEY`, `REVENUECAT_SECRET_KEY` | Never commit these |

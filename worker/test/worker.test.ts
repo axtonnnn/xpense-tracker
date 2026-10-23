@@ -36,7 +36,9 @@ class MemoryKV implements KV {
   }
 }
 
-function setup(opts: { pro?: boolean; rcStatus?: number; ai?: Partial<AIProvider>; env?: Partial<Env> } = {}) {
+function setup(
+  opts: { pro?: boolean; rcStatus?: number; ai?: Partial<AIProvider>; env?: Partial<Env>; keepaliveMs?: number } = {},
+) {
   const kv = new MemoryKV();
   const env: Env = { ANTHROPIC_API_KEY: 'test', REVENUECAT_SECRET_KEY: 'rc_secret', USAGE: kv, ...opts.env };
   const ai: AIProvider = {
@@ -50,7 +52,7 @@ function setup(opts: { pro?: boolean; rcStatus?: number; ai?: Partial<AIProvider
     const entitlements = opts.pro ? { pro: { expires_date: '2027-01-01T00:00:00Z' } } : {};
     return Response.json({ subscriber: { entitlements } });
   }) as unknown as typeof fetch;
-  const handle = createHandler({ ai: () => ai, fetchImpl, now: () => NOW });
+  const handle = createHandler({ ai: () => ai, fetchImpl, now: () => NOW, keepaliveMs: opts.keepaliveMs });
   return { handle, env, kv, ai, fetchImpl };
 }
 
@@ -117,7 +119,9 @@ describe('free trial', () => {
       ai: { scanReceipt: vi.fn(async () => Promise.reject(new AIError(422, 'ai_declined', 'Nope'))) },
     });
     const res = await handle(post('/v1/scan', scanBody), env);
-    expect(res.status).toBe(422);
+    // AI answers stream (status 200 is sent first), so AI errors arrive in the body.
+    expect(res.status).toBe(200);
+    expect((await read(res)).error).toEqual({ code: 'ai_declined', message: 'Nope', status: 422 });
     expect(kv.store.get(`trial:${INSTALL}`)).toBeUndefined();
   });
 
@@ -179,5 +183,24 @@ describe('burst limiter', () => {
     const { handle, env } = setup({ env: { BURST_LIMITER: { limit: async () => ({ success: false }) } } });
     const res = await handle(post('/v1/scan', scanBody), env);
     expect(res.status).toBe(429);
+  });
+});
+
+describe('slow answers', () => {
+  it('keeps the connection alive with whitespace, then sends valid JSON', async () => {
+    const slowScan = vi.fn(() => new Promise<ReceiptResult>((resolve) => setTimeout(() => resolve(receipt), 80)));
+    const { handle, env } = setup({ keepaliveMs: 10, ai: { scanReceipt: slowScan } });
+    const res = await handle(post('/v1/scan', scanBody), env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toContain('no-transform');
+    const text = await res.text();
+    expect(text.startsWith(' ')).toBe(true);
+    expect(JSON.parse(text).receipt.merchant).toBe('Corner Market');
+  });
+
+  it('reports unexpected AI failures in the body', async () => {
+    const { handle, env } = setup({ ai: { checkPurchase: vi.fn(async () => Promise.reject(new Error('boom'))) }, pro: true });
+    const res = await handle(post('/v1/check', checkBody), env);
+    expect((await read(res)).error).toMatchObject({ code: 'ai_error', status: 502 });
   });
 });

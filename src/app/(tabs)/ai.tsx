@@ -187,6 +187,7 @@ export default function AIMode() {
         <Field value={item} onChangeText={setItem} placeholder="What is it? e.g. wireless earbuds" maxLength={120} />
         <Field value={price} onChangeText={setPrice} placeholder={`Price (${currency})`} keyboardType="decimal-pad" />
         <Button title="Check it" icon="help-circle-outline" onPress={runCheck} loading={busy === 'check'} />
+        {busy === 'check' && <ThinkingNote />}
         {check && (
           <View style={{ gap: space.sm }}>
             <Row>
@@ -266,6 +267,7 @@ export default function AIMode() {
           onPress={runReview}
           loading={busy === 'review'}
         />
+        {busy === 'review' && <ThinkingNote />}
       </Card>
 
       {scans && scans.length > 0 && (
@@ -312,12 +314,20 @@ export default function AIMode() {
             <ActivityIndicator size="large" color={c.primary} />
             <AppText variant="title">Reading your receipt…</AppText>
             <AppText muted style={{ textAlign: 'center' }}>
-              Finding items, totals and what’s a need or a want.
+              The AI checks every line for totals and needs vs wants. This can take up to a minute.
             </AppText>
           </View>
         </View>
       </Modal>
     </Screen>
+  );
+}
+
+function ThinkingNote() {
+  return (
+    <AppText variant="caption" muted style={{ textAlign: 'center' }}>
+      Thinking it through carefully. This can take up to a minute.
+    </AppText>
   );
 }
 

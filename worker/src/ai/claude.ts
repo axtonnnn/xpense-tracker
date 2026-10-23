@@ -15,8 +15,13 @@ import {
   type ScanRequest,
 } from '../../../shared/schemas';
 
-// Claude Haiku 5.5: fast and very low cost (≈ $0.0005 per receipt), which keeps Pro margins healthy.
+// Claude Haiku 5.5 at max effort: the low-cost model, thinking as hard as it can about every answer.
+// Thinking makes answers slower (often 10–60 s) and costs ≈ $0.002–0.008 per receipt (README → Running costs).
 export const MODEL = 'claude-haiku-5-5';
+export const EFFORT = 'max';
+
+// Hard stop for one AI answer, retries included. The phone stays connected meanwhile (see slowJson in index.ts).
+const DEADLINE_MS = 150_000;
 
 export class AIError extends Error {
   constructor(
@@ -65,7 +70,8 @@ safety_score (0-100) reflects: saving at least the savings goal (income minus sp
 Tips must be specific to the categories that drove the wants, and practical this week.`;
 
 export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
-  const anthropic = client ?? new Anthropic({ apiKey, maxRetries: 2, timeout: 45_000 });
+  // `timeout` bounds the wait for the response to start; DEADLINE_MS bounds the whole answer.
+  const anthropic = client ?? new Anthropic({ apiKey, maxRetries: 2, timeout: 60_000 });
 
   async function ask<T>(
     schema: z.ZodType<T>,
@@ -73,38 +79,49 @@ export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
     content: Anthropic.ContentBlockParam[],
     maxTokens: number,
   ): Promise<T> {
-    let message;
-    try {
-      message = await anthropic.messages.parse({
-        model: MODEL,
-        max_tokens: maxTokens,
-        system,
-        messages: [{ role: 'user', content }],
-        output_config: { effort: 'low', format: zodOutputFormat(schema as z.ZodType<T> & z.ZodObject) },
-      });
-    } catch (e) {
-      if (e instanceof Anthropic.RateLimitError) {
-        throw new AIError(503, 'ai_busy', 'The AI is busy right now. Please try again in a moment.');
+    const signal = AbortSignal.timeout(DEADLINE_MS);
+    for (let attempt = 1; ; attempt++) {
+      let message;
+      try {
+        // Streamed: at max effort the model may think for many thousands of tokens before answering.
+        message = await anthropic.messages
+          .stream(
+            {
+              model: MODEL,
+              max_tokens: maxTokens,
+              system,
+              messages: [{ role: 'user', content }],
+              output_config: { effort: EFFORT, format: zodOutputFormat(schema as z.ZodType<T> & z.ZodObject) },
+            },
+            { signal },
+          )
+          .finalMessage();
+      } catch (e) {
+        if (e instanceof Anthropic.APIUserAbortError || signal.aborted) {
+          throw new AIError(504, 'ai_timeout', 'The AI took too long to answer. Please try again.');
+        }
+        if (e instanceof Anthropic.RateLimitError || e instanceof Anthropic.InternalServerError) {
+          throw new AIError(503, 'ai_busy', 'The AI is busy right now. Please try again in a moment.');
+        }
+        if (e instanceof Anthropic.APIConnectionError) {
+          throw new AIError(503, 'ai_unreachable', 'Couldn’t reach the AI service. Please try again.');
+        }
+        if (e instanceof Anthropic.APIError) {
+          console.error('[claude]', e.status, e.message);
+          throw new AIError(502, 'ai_error', 'The AI service had a problem. Please try again.');
+        }
+        throw e;
       }
-      if (e instanceof Anthropic.APIConnectionError) {
-        throw new AIError(503, 'ai_unreachable', 'Couldn’t reach the AI service. Please try again.');
+      if (message.stop_reason === 'refusal') {
+        throw new AIError(422, 'ai_declined', 'The AI couldn’t help with this one. Please enter it manually.');
       }
-      if (e instanceof Anthropic.APIError) {
-        console.error('[claude]', e.status, e.message);
-        throw new AIError(502, 'ai_error', 'The AI service had a problem. Please try again.');
+      if (message.stop_reason === 'max_tokens') {
+        throw new AIError(422, 'too_long', 'This is too long to read in one go. Try photographing it in two parts.');
       }
-      throw e;
+      if (message.parsed_output) return message.parsed_output as T;
+      // At the highest effort levels the model can occasionally end with its whole answer in thinking; ask once more.
+      if (attempt >= 2) throw new AIError(502, 'ai_parse_failed', 'The AI answer was incomplete. Please try again.');
     }
-    if (message.stop_reason === 'refusal') {
-      throw new AIError(422, 'ai_declined', 'The AI couldn’t help with this one. Please enter it manually.');
-    }
-    if (message.stop_reason === 'max_tokens') {
-      throw new AIError(422, 'too_long', 'This is too long to read in one go. Try photographing it in two parts.');
-    }
-    if (!message.parsed_output) {
-      throw new AIError(502, 'ai_parse_failed', 'The AI answer was incomplete. Please try again.');
-    }
-    return message.parsed_output as T;
   }
 
   return {
@@ -116,16 +133,16 @@ export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
           { type: 'image', source: { type: 'base64', media_type: req.media_type, data: req.image_base64 } },
           { type: 'text', text: `Today is ${req.today}. The user's currency is ${req.currency} and their locale is ${req.locale}.` },
         ],
-        8000,
+        32_000,
       ),
     checkPurchase: (req) =>
       ask(
         CheckSchema,
         CHECK_SYSTEM,
         [{ type: 'text', text: `Item: ${req.item}\nPrice: ${req.price} ${req.currency}` }],
-        1500,
+        16_000,
       ),
     monthlyReview: (req) =>
-      ask(ReviewSchema, REVIEW_SYSTEM, [{ type: 'text', text: JSON.stringify(req) }], 1500),
+      ask(ReviewSchema, REVIEW_SYSTEM, [{ type: 'text', text: JSON.stringify(req) }], 16_000),
   };
 }

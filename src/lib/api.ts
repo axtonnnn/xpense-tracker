@@ -29,7 +29,9 @@ export class ApiError extends Error {
 /** The free trial is used up (or the feature is Pro-only). The UI responds by opening the paywall. */
 export class NeedsProError extends ApiError {}
 
-const TIMEOUT_MS = 60_000;
+// The AI thinks at max effort, so answers can take a minute or more. The Worker keeps the
+// connection alive while it works; this is the most we wait for the whole answer.
+const TIMEOUT_MS = 180_000;
 
 async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
   if (!API_URL) {
@@ -38,6 +40,7 @@ async function post(path: string, body: unknown): Promise<Record<string, unknown
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   let res: Response;
+  let text: string;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: 'POST',
@@ -45,6 +48,7 @@ async function post(path: string, body: unknown): Promise<Record<string, unknown
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+    text = await res.text();
   } catch (e) {
     const aborted = e instanceof Error && e.name === 'AbortError';
     throw new ApiError(
@@ -54,13 +58,21 @@ async function post(path: string, body: unknown): Promise<Record<string, unknown
   } finally {
     clearTimeout(timer);
   }
-  const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!res.ok || !json) {
-    const err = (json?.error ?? {}) as { code?: string; message?: string };
-    const code = err.code ?? `http_${res.status}`;
-    const message = err.message ?? 'Something went wrong. Please try again.';
-    if (res.status === 402) throw new NeedsProError(code, message, res.status);
-    throw new ApiError(code, message, res.status);
+  let json: Record<string, unknown> | null = null;
+  try {
+    // AI answers may start with keepalive spaces; JSON.parse ignores leading whitespace.
+    json = text.trim() ? (JSON.parse(text) as Record<string, unknown>) : null;
+  } catch {
+    json = null;
+  }
+  // Errors can arrive as an HTTP status, or (after the answer started streaming) inside a 200 body.
+  const err = json?.error as { code?: string; message?: string; status?: number } | undefined;
+  if (!res.ok || !json || err) {
+    const status = err?.status ?? res.status;
+    const code = err?.code ?? `http_${status}`;
+    const message = err?.message ?? 'Something went wrong. Please try again.';
+    if (status === 402) throw new NeedsProError(code, message, status);
+    throw new ApiError(code, message, status);
   }
   return json;
 }
