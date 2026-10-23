@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Necessity } from '../../shared/schemas';
 import { newId, nowISO } from './ids';
 import { notifyChange } from './live';
+import { inTransaction } from './tx';
 import { insertTransaction, type TxType } from './transactions';
 import { dueOccurrences, type Cadence, type RecurringRule } from '@/lib/recurring';
 
@@ -65,14 +66,14 @@ export async function deleteRecurring(db: SQLiteDatabase, id: string): Promise<v
   notifyChange();
 }
 
-/** Books every due salary/bill as a transaction. Safe to call on every app start. */
+/** Books every due salary/bill as a transaction. Safe to call on every app start, even concurrently. */
 export async function applyDueRecurring(db: SQLiteDatabase, today: string, currency: string): Promise<number> {
-  const rules = await db.getAllAsync<Recurring>('SELECT * FROM recurring WHERE active = 1 AND next_on <= ?', today);
   let booked = 0;
-  for (const rule of rules) {
-    const { dates, nextOn } = dueOccurrences(rule, today);
-    if (dates.length === 0) continue;
-    await db.withTransactionAsync(async () => {
+  // Read inside the (serialized) transaction so two overlapping calls can't book the same bill twice.
+  await inTransaction(db, async () => {
+    const rules = await db.getAllAsync<Recurring>('SELECT * FROM recurring WHERE active = 1 AND next_on <= ?', today);
+    for (const rule of rules) {
+      const { dates, nextOn } = dueOccurrences(rule, today);
       for (const date of dates) {
         await insertTransaction(
           db,
@@ -91,9 +92,9 @@ export async function applyDueRecurring(db: SQLiteDatabase, today: string, curre
         );
       }
       await db.runAsync('UPDATE recurring SET next_on = ? WHERE id = ?', nextOn, rule.id);
-    });
-    booked += dates.length;
-  }
+      booked += dates.length;
+    }
+  });
   if (booked > 0) notifyChange();
   return booked;
 }

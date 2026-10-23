@@ -13,28 +13,38 @@ export function LockGate({ children }: { children: ReactNode }) {
   const c = useColors();
   const enabled = !!settings?.appLock && Platform.OS !== 'web';
   const [locked, setLocked] = useState(true);
+  const lockedRef = useRef(true);
   const busy = useRef(false);
 
+  const setLock = useCallback((value: boolean) => {
+    lockedRef.current = value;
+    setLocked(value);
+  }, []);
+
   const unlock = useCallback(async () => {
-    if (busy.current) return;
+    if (busy.current || !lockedRef.current) return;
     busy.current = true;
     try {
       const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Unlock Xpense' });
-      if (res.success) setLocked(false);
+      if (res.success) setLock(false);
     } finally {
       busy.current = false;
     }
-  }, []);
+  }, [setLock]);
 
   useEffect(() => {
     if (!enabled) return;
     unlock();
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'background') setLocked(true);
-      if (s === 'active') unlock();
+      if (s === 'background') setLock(true);
+      // The Face ID sheet itself makes the app briefly inactive → active; only prompt when actually locked.
+      if (s === 'active' && lockedRef.current) unlock();
     });
     return () => sub.remove();
-  }, [enabled, unlock]);
+  }, [enabled, unlock, setLock]);
+
+  // Render nothing until settings load, so locked data never flashes on screen.
+  if (!settings) return null;
 
   return (
     <>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, G, Line, Path, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
 import { AppText, Row } from './ui';
@@ -14,6 +14,8 @@ const Y_AXIS_W = 44;
 const TOP_PAD = 8;
 const GAP = 2; // surface gap between stacked segments
 const MIN_SEG = 2;
+// SVG text doesn't inherit the app font on web; use the system UI font there too.
+const SVG_FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' : undefined;
 
 type Props = {
   buckets: Bucket[];
@@ -55,7 +57,7 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
           <Row style={{ gap: space.lg, flexWrap: 'wrap' }}>
             <Reading color={c.need} kind="rect" value={formatMoney(sel.need, currency)} label="Needs" />
             <Reading color={c.want} kind="rect" value={formatMoney(sel.want, currency)} label="Wants" />
-            <Reading color={c.income} kind="line" value={formatMoney(sel.income, currency)} label="Income" />
+            <Reading color={c.income} kind={incomeLine ? 'line' : 'dot'} value={formatMoney(sel.income, currency)} label="Income" />
           </Row>
         </View>
       )}
@@ -85,6 +87,7 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
                   x={Y_AXIS_W - 6}
                   y={y(t) + 4}
                   fontSize={11}
+                  fontFamily={SVG_FONT}
                   fill={c.inkMuted}
                   textAnchor="end">
                   {formatAxis(t, currency)}
@@ -136,6 +139,7 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
                   x={cx(i)}
                   y={PLOT_H + 17}
                   fontSize={11}
+                  fontFamily={SVG_FONT}
                   fontWeight={i === selected ? '700' : '400'}
                   fill={i === selected ? c.ink : c.inkMuted}
                   textAnchor="middle">
@@ -143,7 +147,7 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
                 </SvgText>
               ))}
               {empty && (
-                <SvgText x={Y_AXIS_W + plotW / 2} y={PLOT_H / 2} fontSize={13} fill={c.inkMuted} textAnchor="middle">
+                <SvgText x={Y_AXIS_W + plotW / 2} y={PLOT_H / 2} fontSize={13} fontFamily={SVG_FONT} fill={c.inkMuted} textAnchor="middle">
                   No activity in this period yet
                 </SvgText>
               )}
@@ -172,7 +176,7 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
         <Row style={{ gap: space.md }}>
           <LegendKey color={c.need} kind="rect" label="Needs" />
           <LegendKey color={c.want} kind="rect" label="Wants" />
-          <LegendKey color={c.income} kind="line" label="Income" />
+          <LegendKey color={c.income} kind={incomeLine ? 'line' : 'dot'} label="Income" />
         </Row>
         <Pressable onPress={() => setShowTable((v) => !v)} accessibilityRole="button" hitSlop={8}>
           <AppText variant="caption" color={c.primary} style={{ fontWeight: '700' }}>
@@ -184,15 +188,15 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
   );
 }
 
-function Key({ color, kind }: { color: string; kind: 'rect' | 'line' }) {
-  return kind === 'rect' ? (
-    <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: color }} />
-  ) : (
-    <View style={{ width: 14, height: 2, borderRadius: 1, backgroundColor: color }} />
-  );
+type KeyKind = 'rect' | 'line' | 'dot';
+
+function Key({ color, kind }: { color: string; kind: KeyKind }) {
+  if (kind === 'rect') return <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: color }} />;
+  if (kind === 'dot') return <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color }} />;
+  return <View style={{ width: 14, height: 2, borderRadius: 1, backgroundColor: color }} />;
 }
 
-function LegendKey({ color, kind, label }: { color: string; kind: 'rect' | 'line'; label: string }) {
+function LegendKey({ color, kind, label }: { color: string; kind: KeyKind; label: string }) {
   return (
     <Row style={{ gap: 6 }}>
       <Key color={color} kind={kind} />
@@ -203,7 +207,7 @@ function LegendKey({ color, kind, label }: { color: string; kind: 'rect' | 'line
   );
 }
 
-function Reading({ color, kind, value, label }: { color: string; kind: 'rect' | 'line'; value: string; label: string }) {
+function Reading({ color, kind, value, label }: { color: string; kind: KeyKind; value: string; label: string }) {
   return (
     <View style={{ gap: 2 }}>
       <AppText style={{ fontWeight: '700' }}>{value}</AppText>

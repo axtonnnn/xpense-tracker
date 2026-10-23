@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Necessity } from '../../shared/schemas';
 import { newId, nowISO } from './ids';
 import { notifyChange } from './live';
+import { inTransaction } from './tx';
 import { deleteReceiptImage } from '@/lib/files';
 import type { ReceiptDraft } from '@/lib/receipt';
 import { splitTotal, transactionCategory } from '@/lib/receipt';
@@ -138,7 +139,7 @@ export async function deleteTransaction(db: SQLiteDatabase, id: string): Promise
   const tx = await db.getFirstAsync<Tx>('SELECT * FROM transactions WHERE id = ?', id);
   if (!tx) return;
   let imageUri: string | null = null;
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.runAsync('DELETE FROM transactions WHERE id = ?', id);
     if (tx.receipt_id) {
       const r = await db.getFirstAsync<{ image_uri: string | null }>(
@@ -195,7 +196,7 @@ export async function saveScannedReceipt(
   const receiptId = newId();
   const txId = newId();
   const split = splitTotal(draft);
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO receipts (id, image_uri, doc_type, merchant, subtotal_cents, tax_cents, tip_cents, total_cents,
          due_on, ai_json, scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -253,22 +254,18 @@ export async function setItemNecessity(
   itemId: string,
   necessity: Necessity,
 ): Promise<void> {
-  const found = await getTransaction(db, txId);
-  if (!found?.receipt) return;
-  const items = found.items.map((it) => (it.id === itemId ? { ...it, necessity } : it));
-  const split = splitTotal({
-    totalCents: found.tx.amount_cents,
-    necessity: found.tx.need_cents >= found.tx.want_cents ? 'need' : 'want',
-    items: items.map((it) => ({ totalCents: it.total_cents, necessity: it.necessity })),
-  });
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
+    // Read inside the transaction so quick successive toggles each see the previous one.
+    const found = await getTransaction(db, txId);
+    if (!found?.receipt) return;
+    const items = found.items.map((it) => (it.id === itemId ? { ...it, necessity } : it));
+    const split = splitTotal({
+      totalCents: found.tx.amount_cents,
+      necessity: found.tx.need_cents >= found.tx.want_cents ? 'need' : 'want',
+      items: items.map((it) => ({ totalCents: it.total_cents, necessity: it.necessity })),
+    });
     await db.runAsync('UPDATE receipt_items SET necessity = ? WHERE id = ?', necessity, itemId);
-    await db.runAsync(
-      'UPDATE transactions SET need_cents = ?, want_cents = ? WHERE id = ?',
-      split.need,
-      split.want,
-      txId,
-    );
+    await db.runAsync('UPDATE transactions SET need_cents = ?, want_cents = ? WHERE id = ?', split.need, split.want, txId);
   });
   notifyChange();
 }
@@ -281,7 +278,7 @@ export async function deleteAllData(db: SQLiteDatabase): Promise<string[]> {
   const images = await db.getAllAsync<{ image_uri: string }>(
     'SELECT image_uri FROM receipts WHERE image_uri IS NOT NULL',
   );
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.execAsync(
       'DELETE FROM transactions; DELETE FROM receipt_items; DELETE FROM receipts; DELETE FROM recurring; DELETE FROM settings;',
     );

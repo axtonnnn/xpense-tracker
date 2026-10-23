@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, Switch, View } from 'react-native';
 
 import { AppText, Banner, Button, Card, Chip, Field, ProBadge, Row, Screen, SectionTitle, type IconName } from '@/components/ui';
@@ -13,6 +13,8 @@ import { PRIVACY_URL, TERMS_URL } from '@/lib/config';
 import { confirm, notify } from '@/lib/confirm';
 import { today } from '@/lib/dates';
 import { shareCSV } from '@/lib/export';
+import { getInstallId } from '@/lib/install-id';
+import { loadSampleData } from '@/lib/sample-data';
 import { centsToInput, CURRENCIES, parseAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { space, useColors } from '@/theme/tokens';
@@ -33,6 +35,11 @@ function SettingsForm({ settings }: { settings: Settings }) {
   const [hours, setHours] = useState(String(settings.hoursPerWeek));
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [supportId, setSupportId] = useState('');
+
+  useEffect(() => {
+    getInstallId().then(setSupportId, () => setSupportId(''));
+  }, []);
 
   const saveMoney = async () => {
     const code = currency.trim().toUpperCase();
@@ -184,6 +191,9 @@ function SettingsForm({ settings }: { settings: Settings }) {
       <Card style={{ gap: space.md }}>
         {PRIVACY_URL ? <LinkRow label="Privacy policy" url={PRIVACY_URL} /> : null}
         {TERMS_URL ? <LinkRow label="Terms of use" url={TERMS_URL} /> : null}
+        <AppText variant="caption" muted selectable>
+          Support ID: {supportId}
+        </AppText>
         <AppText variant="caption" muted>
           Xpense {Constants.expoConfig?.version ?? ''}
         </AppText>
@@ -199,6 +209,21 @@ function SettingsForm({ settings }: { settings: Settings }) {
               body="Development builds only. Unlocks Pro screens without a purchase."
               value={settings.devPro}
               onChange={(on) => setSettings(db, { dev_pro: on })}
+            />
+            <Button
+              title="Load sample data"
+              kind="secondary"
+              icon="flask-outline"
+              loading={busy === 'sample'}
+              onPress={async () => {
+                setBusy('sample');
+                try {
+                  await loadSampleData(db, settings.currency);
+                  setMessage('Sample data loaded.');
+                } finally {
+                  setBusy(null);
+                }
+              }}
             />
           </Card>
         </>

@@ -1,3 +1,5 @@
+import { describe, expect, it } from '@jest/globals';
+
 import type { ReceiptResult } from '../../../shared/schemas';
 import { draftFromAI, draftWarnings, splitTotal, transactionCategory } from '../receipt';
 

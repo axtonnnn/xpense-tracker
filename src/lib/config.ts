@@ -11,8 +11,11 @@ type Extra = {
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
 
-/** Base URL of the Cloudflare Worker. "demo" returns sample AI answers in development builds. */
-export const API_URL = (extra.apiUrl ?? '').replace(/\/$/, '');
+/**
+ * Base URL of the Cloudflare Worker, from app.json (or EXPO_PUBLIC_API_URL in a local .env).
+ * "demo" returns sample AI answers in development builds, so the app can be tried before deploying.
+ */
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || extra.apiUrl || '').replace(/\/$/, '');
 export const DEMO_AI = __DEV__ && API_URL === 'demo';
 
 export const REVENUECAT_KEY =

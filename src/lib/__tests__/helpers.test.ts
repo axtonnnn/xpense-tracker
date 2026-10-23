@@ -1,3 +1,5 @@
+import { describe, expect, it } from '@jest/globals';
+
 import { categorize } from '../categorize';
 import { niceTicks, roundedTopBar } from '../chart';
 import { addMonths, isValidISODate, startOfWeek } from '../dates';

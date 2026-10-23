@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { useLiveQuery, notifyChange } from './live';
+import { inTransaction } from './tx';
 import { parseCustomCategories, type CustomCategory } from '@/lib/categories';
 
 export type Settings = {
@@ -68,7 +69,7 @@ export async function setSettings(
   db: SQLiteDatabase,
   values: Partial<Record<Key, string | number | boolean>>,
 ): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     for (const [key, raw] of Object.entries(values)) {
       if (raw === undefined) continue;
       const value = typeof raw === 'boolean' ? (raw ? '1' : '0') : String(raw);
