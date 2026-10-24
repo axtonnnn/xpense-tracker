@@ -65,22 +65,19 @@ docs/                 privacy policy, terms of use, brand guide, screenshots
 
 ## Run it locally
 
-Requirements: Node 20+ and the **Expo Go** app on your phone.
+Requirements: Node 20+ on your computer and the free **Expo Go** app on your phone (App Store or Google Play).
 
 ```bash
 npm install
-npx expo start --go     # scan the QR code with Expo Go (iPhone camera or Android Expo Go)
+npm run demo            # then scan the QR code: iPhone Camera app, or "Scan QR code" in Expo Go on Android
 ```
 
-`--go` matters: the project includes `expo-dev-client`, so plain `npx expo start` expects a development build (see step 3) instead of Expo Go.
+`npm run demo` opens the app in Expo Go with **sample AI answers**, so AI mode works before the AI server is deployed. Any photo you scan comes back as the same sample receipt.
 
-To try AI mode before deploying anything, create `.env.local` with:
-
-```
-EXPO_PUBLIC_API_URL=demo
-```
-
-In development builds this returns sample AI answers. To see the app full of realistic data, use **Settings → Developer**: **Load sample data** fills about 3 months of entries, and **Simulate Pro** unlocks the Pro screens.
+- **Same Wi-Fi:** the phone and the computer must be on the same Wi-Fi. If the phone can't connect, use `npm run demo -- --tunnel`.
+- **Realistic data:** to fill the app with data, use **Settings → Developer**. **Load sample data** adds about 3 months of entries, and **Simulate Pro** unlocks the Pro screens.
+- **Real AI:** once the AI server is deployed (step 1), run `npx expo start --go` instead. Keep `--go`: the project includes `expo-dev-client`, so plain `npx expo start` expects a development build (step 3) rather than Expo Go.
+- **What Expo Go can't show:** real purchases and the app's own icon. Use a development build for those.
 
 Checks:
 
