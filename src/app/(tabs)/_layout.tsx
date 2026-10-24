@@ -1,10 +1,9 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link, Redirect } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
-import { Pressable } from 'react-native';
 
+import { TabBar } from '@/components/TabBar';
 import { useSettings } from '@/db/settings';
-import { useColors } from '@/theme/tokens';
+import { fonts, useColors } from '@/theme/tokens';
 
 export default function TabsLayout() {
   const settings = useSettings();
@@ -14,50 +13,19 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <TabBar {...props} />}
       screenOptions={{
-        tabBarActiveTintColor: c.primary,
-        tabBarInactiveTintColor: c.inkMuted,
-        tabBarStyle: { backgroundColor: c.surface, borderTopColor: c.border },
         headerStyle: { backgroundColor: c.bg },
         headerShadowVisible: false,
-        headerTitleStyle: { color: c.ink, fontWeight: '700' },
+        headerTitleAlign: 'left',
+        headerTitleStyle: { color: c.ink, fontFamily: fonts.extrabold, fontSize: 24, letterSpacing: -0.4 },
         sceneStyle: { backgroundColor: c.bg },
       }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart" size={size} color={color as string} />,
-          headerRight: () => (
-            <Link href="/settings" asChild>
-              <Pressable accessibilityLabel="Settings" hitSlop={10} style={{ marginRight: 16 }}>
-                <Ionicons name="settings-outline" size={22} color={c.ink} />
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="ai"
-        options={{
-          title: 'AI mode',
-          tabBarIcon: ({ color, size }) => <Ionicons name="sparkles" size={size} color={color as string} />,
-        }}
-      />
-      <Tabs.Screen
-        name="tracker"
-        options={{
-          title: 'Tracker',
-          tabBarIcon: ({ color, size }) => <Ionicons name="add-circle" size={size} color={color as string} />,
-        }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: 'History',
-          tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color as string} />,
-        }}
-      />
+      {/* The dashboard draws its own header with the logo. */}
+      <Tabs.Screen name="index" options={{ title: 'Dashboard', headerShown: false }} />
+      <Tabs.Screen name="ai" options={{ title: 'AI mode' }} />
+      <Tabs.Screen name="tracker" options={{ title: 'Tracker' }} />
+      <Tabs.Screen name="history" options={{ title: 'History' }} />
     </Tabs>
   );
 }

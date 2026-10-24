@@ -1,11 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ShieldCard, StatTile } from '@/components/money-ui';
+import { Logo } from '@/components/brand';
+import { CoinSprout } from '@/components/illustrations';
+import { CategoryIcon, SafeToSpendCard, StatTile, type Delta } from '@/components/money-ui';
 import { ProgressChart } from '@/components/ProgressChart';
-import { AppText, Button, Card, EmptyState, ProBadge, Row, Screen, Segmented } from '@/components/ui';
+import { AppText, Banner, Button, Card, EmptyState, IconButton, ProBadge, Row, Screen, Segmented } from '@/components/ui';
 import { useLiveQuery } from '@/db/live';
 import { listRecurring } from '@/db/recurring';
 import { useSettings } from '@/db/settings';
@@ -13,17 +16,18 @@ import { listBetween } from '@/db/transactions';
 import {
   categoryBreakdown,
   chartSeries,
+  comparePeriods,
   needsShare,
+  pctChange,
   periodRange,
   previousRange,
   PRO_PERIODS,
   safeToSpend,
-  totals,
   wantsTrend,
   type Period,
 } from '@/lib/budget';
 import { categoryInfo } from '@/lib/categories';
-import { endOfMonth, startOfMonth, today } from '@/lib/dates';
+import { endOfMonth, formatDay, parseISODate, startOfMonth, today } from '@/lib/dates';
 import { formatMoney } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { space, useColors } from '@/theme/tokens';
@@ -35,10 +39,29 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: '1y', label: '1 year' },
 ];
 
-const PERIOD_NOUN: Record<Period, string> = { week: 'last week', month: 'last month', '6m': 'the 6 months before', '1y': 'the year before' };
+/** Changes this small (in %) read as "about level" rather than up or down. */
+const LEVEL_PCT = 2;
+
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+}
+
+function periodTitle(period: Period, t: string): string {
+  if (period === 'week') return 'This week';
+  if (period === 'month') return parseISODate(t).toLocaleDateString(undefined, { month: 'long' });
+  return period === '6m' ? 'Last 6 months' : 'Last 12 months';
+}
+
+function vsLabel(period: Period, prevStart: string): string {
+  if (period === 'week') return 'last week';
+  if (period === 'month') return parseISODate(prevStart).toLocaleDateString(undefined, { month: 'short' });
+  return period === '6m' ? 'prior 6 mo' : 'prior year';
+}
 
 export default function Dashboard() {
   const c = useColors();
+  const insets = useSafeAreaInsets();
   const settings = useSettings();
   const { isPro } = usePro();
   const requirePro = useRequirePro();
@@ -54,31 +77,37 @@ export default function Dashboard() {
   const { data: recurring } = useLiveQuery(listRecurring, []);
 
   const currency = settings?.currency ?? 'USD';
-  const view = useMemo(() => {
-    if (!txs || !settings || !recurring) return null;
-    const buckets = chartSeries(txs, period, t);
-    const current = Math.max(0, buckets.findIndex((b) => t >= b.start && t <= b.end));
-    return {
-      buckets,
-      current,
-      tot: totals(txs, range.start, range.end),
-      safe: safeToSpend({
-        today: t,
-        txs,
-        expectedIncomeCents: settings.monthlyIncomeCents,
-        savingsGoalCents: settings.savingsGoalCents,
-        recurring,
-      }),
-      trend: wantsTrend(txs, period, t),
-      breakdown: categoryBreakdown(txs, range.start, range.end).slice(0, 5),
-    };
-  }, [txs, settings, recurring, period, t, range.start, range.end]);
+  // Derived each render; the React Compiler memoizes this.
+  const buckets = txs ? chartSeries(txs, period, t) : null;
+  const view =
+    txs && settings && recurring && buckets
+      ? {
+          buckets,
+          current: Math.max(0, buckets.findIndex((b) => t >= b.start && t <= b.end)),
+          cmp: comparePeriods(txs, period, t),
+          safe: safeToSpend({
+            today: t,
+            txs,
+            expectedIncomeCents: settings.monthlyIncomeCents,
+            savingsGoalCents: settings.savingsGoalCents,
+            recurring,
+          }),
+          trend: wantsTrend(txs, period, t),
+          breakdown: categoryBreakdown(txs, range.start, range.end).slice(0, 5),
+        }
+      : null;
 
   if (!view || !settings) return <Screen>{null}</Screen>;
 
   const selected = picked?.period === period ? picked.index : view.current;
-  const share = needsShare(view.tot.need, view.tot.want);
+  const { current: cur, previous: was } = view.cmp;
+  const vs = vsLabel(period, prev.start);
+  const share = needsShare(cur.need, cur.want);
+  const prevShare = needsShare(was.need, was.want);
+  const sharePts = share !== null && prevShare !== null ? Math.round((share - prevShare) * 100) : null;
+  const delta = (now: number, before: number, goodWhenUp: boolean): Delta => ({ pct: pctChange(now, before), goodWhenUp, vs });
   const isEmpty = txs?.length === 0;
+  const wantsPct = view.trend.changePct;
 
   const choosePeriod = (p: Period) => {
     if (PRO_PERIODS.includes(p) && !requirePro('long_range_charts')) return;
@@ -86,59 +115,76 @@ export default function Dashboard() {
   };
 
   return (
-    <Screen>
+    <Screen contentStyle={{ paddingTop: insets.top + space.sm }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Logo size={26} />
+        <IconButton icon="settings-outline" label="Settings" onPress={() => router.push('/settings')} />
+      </Row>
+
+      <View style={{ gap: 2 }}>
+        <AppText variant="caption" weight="semibold" muted>
+          {greeting()}
+        </AppText>
+        <AppText variant="display" accessibilityRole="header">
+          {periodTitle(period, t)}
+        </AppText>
+      </View>
+
       <Segmented options={PERIODS} value={period} onChange={choosePeriod} locked={isPro ? [] : PRO_PERIODS} />
 
       <Card>
-        <AppText variant="title">Your progress</AppText>
-        <ProgressChart
-          buckets={view.buckets}
-          currency={currency}
-          selected={selected}
-          onSelect={(index) => setPicked({ period, index })}
-          incomeLine={period === '6m' || period === '1y'}
-        />
-      </Card>
-
-      {isEmpty && (
-        <Card>
+        <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <AppText variant="title">Your progress</AppText>
+          <AppText variant="caption" weight="semibold" muted>
+            {formatDay(range.start, { month: 'short', day: 'numeric' })} – {formatDay(range.end, { month: 'short', day: 'numeric' })}
+          </AppText>
+        </Row>
+        {isEmpty ? (
           <EmptyState
-            icon="leaf-outline"
-            title="Let's start growing your savings"
-            body="Add an expense or income, or scan a receipt and let AI do the typing."
+            illustration={<CoinSprout />}
+            title="Let’s grow your savings"
+            body="Add an expense or income, or scan a receipt and let AI do the typing. Your chart fills in as you go."
             action={
               <Row>
                 <Button title="Add entry" icon="add" onPress={() => router.navigate('/tracker')} />
-                <Button title="Scan" icon="camera-outline" kind="secondary" onPress={() => router.navigate('/ai')} />
+                <Button title="Scan" icon="scan" kind="secondary" onPress={() => router.navigate('/ai')} />
               </Row>
             }
           />
-        </Card>
-      )}
+        ) : (
+          <ProgressChart
+            buckets={view.buckets}
+            currency={currency}
+            selected={selected}
+            onSelect={(index) => setPicked({ period, index })}
+            incomeLine={period === '6m' || period === '1y'}
+          />
+        )}
+      </Card>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.md }}>
-        <StatTile label="Income" value={formatMoney(view.tot.income, currency)} />
-        <StatTile label="Spent" value={formatMoney(view.tot.spent, currency)} />
-        <StatTile label="Saved" value={formatMoney(view.tot.saved, currency)} />
-        <StatTile label="Spent on needs" value={share === null ? '—' : `${Math.round(share * 100)}%`} />
+        <StatTile label="Income" icon="trending-up" value={formatMoney(cur.income, currency)} delta={delta(cur.income, was.income, true)} />
+        <StatTile label="Spent" icon="card-outline" value={formatMoney(cur.spent, currency)} delta={delta(cur.spent, was.spent, false)} />
+        <StatTile label="Saved" icon="leaf-outline" value={formatMoney(cur.saved, currency)} delta={delta(cur.saved, was.saved, true)} />
+        <StatTile
+          label="Spent on needs"
+          icon="shield-checkmark-outline"
+          value={share === null ? '—' : `${Math.round(share * 100)}%`}
+          delta={{ pct: sharePts, goodWhenUp: true, vs, suffix: Math.abs(sharePts ?? 0) === 1 ? ' pt' : ' pts' }}
+        />
       </View>
 
-      {view.trend.changePct !== null && (
-        <Row style={{ paddingHorizontal: space.xs }}>
-          <Ionicons
-            name={view.trend.changePct <= 0 ? 'leaf' : 'trending-up'}
-            size={18}
-            color={view.trend.changePct <= 0 ? c.need : c.want}
-          />
-          <AppText style={{ flex: 1 }}>
-            {view.trend.changePct === 0
-              ? `Wants are level with ${PERIOD_NOUN[period]}`
-              : `Wants ${view.trend.changePct < 0 ? 'down' : 'up'} ${Math.abs(view.trend.changePct)}% vs ${PERIOD_NOUN[period]}`}
-          </AppText>
-        </Row>
+      {wantsPct !== null && (
+        <Banner tone={wantsPct <= LEVEL_PCT ? 'success' : 'warn'} icon={wantsPct <= LEVEL_PCT ? 'leaf' : 'trending-up'}>
+          {Math.abs(wantsPct) <= LEVEL_PCT
+            ? `Wants are about level with ${vs}. Steady is good.`
+            : wantsPct < 0
+              ? `Wants are down ${Math.abs(wantsPct)}% vs ${vs}. Nice conserving!`
+              : `Wants are up ${wantsPct}% vs ${vs}. A good time to pause the extras.`}
+        </Banner>
       )}
 
-      <ShieldCard safe={view.safe} currency={currency} onSetup={() => router.push('/settings')} />
+      <SafeToSpendCard safe={view.safe} currency={currency} onSetup={() => router.push('/settings')} />
 
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
@@ -153,19 +199,19 @@ export default function Dashboard() {
               const max = view.breakdown[0].total || 1;
               const info = categoryInfo(b.category, settings.customCategories);
               return (
-                <View key={b.category} style={{ gap: 6 }}>
-                  <Row style={{ justifyContent: 'space-between' }}>
-                    <Row>
-                      <Ionicons name={info.icon} size={16} color={c.inkMuted} />
-                      <AppText>{info.label}</AppText>
+                <Row key={b.category} style={{ gap: space.md }}>
+                  <CategoryIcon category={b.category} custom={settings.customCategories} necessity={b.need >= b.want ? 'need' : 'want'} size={36} />
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Row style={{ justifyContent: 'space-between' }}>
+                      <AppText weight="semibold">{info.label}</AppText>
+                      <AppText weight="bold">{formatMoney(b.total, currency)}</AppText>
                     </Row>
-                    <AppText style={{ fontWeight: '700' }}>{formatMoney(b.total, currency)}</AppText>
-                  </Row>
-                  <View style={{ flexDirection: 'row', height: 8, width: `${(b.total / max) * 100}%`, gap: b.need && b.want ? 2 : 0 }}>
-                    {b.need > 0 && <View style={{ flex: b.need, backgroundColor: c.need, borderRadius: 4 }} />}
-                    {b.want > 0 && <View style={{ flex: b.want, backgroundColor: c.want, borderRadius: 4 }} />}
+                    <View style={{ flexDirection: 'row', height: 6, width: `${(b.total / max) * 100}%`, gap: b.need && b.want ? 2 : 0 }}>
+                      {b.need > 0 && <View style={{ flex: b.need, backgroundColor: c.need, borderRadius: 3 }} />}
+                      {b.want > 0 && <View style={{ flex: b.want, backgroundColor: c.want, borderRadius: 3 }} />}
+                    </View>
                   </View>
-                </View>
+                </Row>
               );
             })
           )
@@ -176,6 +222,13 @@ export default function Dashboard() {
           </>
         )}
       </Card>
+
+      <Row style={{ justifyContent: 'center', gap: 6, opacity: 0.7 }}>
+        <Ionicons name="lock-closed" size={12} color={c.inkMuted} />
+        <AppText variant="caption" muted>
+          Your data stays on this phone
+        </AppText>
+      </Row>
     </Screen>
   );
 }

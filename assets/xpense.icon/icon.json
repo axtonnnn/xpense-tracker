@@ -1,0 +1,47 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.11765,0.35686,0.30980,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "wants.svg",
+          "name": "wants",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "image-name": "needs.svg",
+          "name": "needs",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.4
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

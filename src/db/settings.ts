@@ -41,7 +41,8 @@ type Key =
   | 'app_lock'
   | 'custom_categories'
   | 'dev_pro'
-  | 'trial_remaining';
+  | 'trial_remaining'
+  | 'review_asked';
 
 export async function getSettings(db: SQLiteDatabase): Promise<Settings> {
   const rows = await db.getAllAsync<{ key: Key; value: string }>('SELECT key, value FROM settings');

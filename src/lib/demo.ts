@@ -38,7 +38,7 @@ export async function demoCheck(req: CheckRequest): Promise<CheckResult> {
   return {
     necessity: 'want',
     verdict: req.price > 100 ? 'wait' : 'go',
-    reason: `A ${req.item} is nice to have but not essential. If it still feels important in a few days, it's probably worth it.`,
+    reason: "This looks like a nice-to-have rather than an essential. If it still feels important in a few days, it's probably worth it.",
     cheaper_alternative: 'Look for a refurbished or second-hand option.',
     questions: ['Will I use it every week?', 'Do I already own something that does this?', 'Would I buy it at full price next month?'],
   };

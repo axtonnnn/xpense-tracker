@@ -2,11 +2,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
+import { LogoMark } from '@/components/brand';
 import { ConsentSheet } from '@/components/ConsentSheet';
-import { AppText, Banner, Button, Card, Field, ProBadge, Row, Screen, SectionTitle } from '@/components/ui';
+import { ReceiptScan } from '@/components/illustrations';
+import { AppText, Banner, Button, Card, Field, HeroCard, IconCircle, Pill, ProBadge, Row, Screen, SectionTitle } from '@/components/ui';
 import type { CheckResult, ReviewResult } from '../../../shared/schemas';
 import { useLiveQuery } from '@/db/live';
 import { listRecurring } from '@/db/recurring';
@@ -19,13 +22,7 @@ import { addMonths, endOfMonth, formatDay, monthKey, startOfMonth, today } from 
 import { formatMoney, fromCents, parseAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { pickImage, runScan, type PickSource } from '@/lib/scan';
-import { radius, space, useColors } from '@/theme/tokens';
-
-const VERDICT = {
-  go: { label: 'Reasonable buy', icon: 'checkmark-circle' as const },
-  wait: { label: 'Sleep on it', icon: 'time' as const },
-  skip: { label: 'Probably skip', icon: 'close-circle' as const },
-};
+import { elevation, fonts, radius, space, useColors, useIsDark } from '@/theme/tokens';
 
 export default function AIMode() {
   const db = useSQLiteContext();
@@ -144,79 +141,82 @@ export default function AIMode() {
   const hourly = hourlyRateCents(settings.monthlyIncomeCents, settings.hoursPerWeek);
   const safe =
     txs && recurring
-      ? safeToSpend({
-          today: t,
-          txs,
-          expectedIncomeCents: settings.monthlyIncomeCents,
-          savingsGoalCents: settings.savingsGoalCents,
-          recurring,
-        })
+      ? safeToSpend({ today: t, txs, expectedIncomeCents: settings.monthlyIncomeCents, savingsGoalCents: settings.savingsGoalCents, recurring })
       : null;
+  const hours = check ? hoursOfWork(check.priceCents, hourly) : null;
 
   return (
     <Screen>
-      <Card style={{ gap: space.lg }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={[styles.heroIcon, { backgroundColor: c.surfaceAlt }]}>
-            <Ionicons name="scan" size={26} color={c.primary} />
-          </View>
+      <HeroCard>
+        <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <ReceiptScan width={118} onHero />
           {isPro ? (
-            <ProBadge />
+            <ProBadge onHero />
           ) : (
-            <AppText variant="caption" muted>
-              {trialLeft > 0 ? `${trialLeft} free ${trialLeft === 1 ? 'scan' : 'scans'} left` : 'Free scans used'}
-            </AppText>
+            <Pill
+              icon="sparkles"
+              label={trialLeft > 0 ? `${trialLeft} free ${trialLeft === 1 ? 'scan' : 'scans'} left` : 'Free scans used'}
+              color={c.onHero}
+              bg="rgba(246,244,238,0.14)"
+            />
           )}
         </Row>
         <View style={{ gap: 4 }}>
-          <AppText variant="title">Scan a receipt or bill</AppText>
-          <AppText muted>AI reads the items, totals and date, and sorts each line into needs and wants for you.</AppText>
+          <AppText variant="display" color={c.onHero} style={{ fontSize: 26, lineHeight: 32 }}>
+            Scan a receipt or bill
+          </AppText>
+          <AppText color={c.onHeroMuted}>AI reads every item, total and date, and sorts each line into needs and wants.</AppText>
         </View>
-        <Button title="Take photo" icon="camera" onPress={() => scan('camera')} />
-        <Button title="Choose from photos" icon="images-outline" kind="secondary" onPress={() => scan('library')} />
-      </Card>
+        <Button title="Take photo" icon="camera" kind="hero" onPress={() => scan('camera')} />
+        <Button title="Choose from photos" icon="images-outline" kind="heroGhost" onPress={() => scan('library')} />
+      </HeroCard>
 
       {error && <Banner tone="danger">{error}</Banner>}
 
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
-          <AppText variant="title">Should I buy this?</AppText>
+          <Row style={{ gap: space.md }}>
+            <IconCircle icon="bag-handle-outline" bg={c.wantSoft} color={c.wantInk} />
+            <AppText variant="title">Should I buy this?</AppText>
+          </Row>
           {!isPro && <ProBadge />}
         </Row>
         <AppText muted>Pause before a purchase. See it in hours of work and get an honest second opinion.</AppText>
-        <Field value={item} onChangeText={setItem} placeholder="What is it? e.g. wireless earbuds" maxLength={120} />
-        <Field value={price} onChangeText={setPrice} placeholder={`Price (${currency})`} keyboardType="decimal-pad" />
+        <Field icon="pricetag-outline" value={item} onChangeText={setItem} placeholder="What is it? e.g. wireless earbuds" maxLength={120} />
+        <Field icon="cash-outline" value={price} onChangeText={setPrice} placeholder={`Price (${currency})`} keyboardType="decimal-pad" />
         <Button title="Check it" icon="help-circle-outline" onPress={runCheck} loading={busy === 'check'} />
         {busy === 'check' && <ThinkingNote />}
         {check && (
-          <View style={{ gap: space.sm }}>
-            <Row>
-              <Ionicons name={VERDICT[check.verdict].icon} size={22} color={check.verdict === 'go' ? c.need : c.want} />
-              <AppText variant="title">{VERDICT[check.verdict].label}</AppText>
-              <AppText muted>· {check.necessity === 'need' ? 'Need' : 'Want'}</AppText>
+          <View style={{ gap: space.md }}>
+            <Row style={{ flexWrap: 'wrap' }}>
+              <Verdict verdict={check.verdict} />
+              <Pill
+                label={check.necessity === 'need' ? 'Need' : 'Want'}
+                icon={check.necessity === 'need' ? 'shield-checkmark' : 'star'}
+                color={check.necessity === 'need' ? c.needInk : c.wantInk}
+                bg={check.necessity === 'need' ? c.needSoft : c.wantSoft}
+              />
             </Row>
-            {hoursOfWork(check.priceCents, hourly) !== null && (
-              <AppText>
-                ≈ <AppText style={{ fontWeight: '700' }}>{hoursOfWork(check.priceCents, hourly)!.toFixed(1)} hours</AppText> of
-                work
-              </AppText>
-            )}
-            {safe && safe.amount > 0 && (
-              <AppText>
-                {Math.round((check.priceCents / safe.amount) * 100)}% of what’s safe to spend this month
-              </AppText>
-            )}
-            <AppText muted>{check.reason}</AppText>
+            <Row style={{ gap: space.md }}>
+              {hours !== null && <Metric value={`${hours.toFixed(1)} h`} label="of your work" />}
+              {safe && safe.amount > 0 && <Metric value={`${Math.round((check.priceCents / safe.amount) * 100)}%`} label="of safe-to-spend" />}
+            </Row>
+            <AppText>{check.reason}</AppText>
             {check.cheaper_alternative && (
-              <Row style={{ alignItems: 'flex-start' }}>
-                <Ionicons name="leaf-outline" size={16} color={c.need} style={{ marginTop: 3 }} />
-                <AppText style={{ flex: 1 }}>{check.cheaper_alternative}</AppText>
+              <Row style={{ alignItems: 'flex-start', gap: space.md }}>
+                <Ionicons name="leaf" size={18} color={c.need} style={{ marginTop: 2 }} />
+                <AppText weight="semibold" style={{ flex: 1 }}>
+                  {check.cheaper_alternative}
+                </AppText>
               </Row>
             )}
             {check.questions.slice(0, 3).map((q) => (
-              <AppText key={q} variant="caption" muted>
-                • {q}
-              </AppText>
+              <Row key={q} style={{ alignItems: 'flex-start', gap: space.sm }}>
+                <AppText muted>•</AppText>
+                <AppText muted style={{ flex: 1 }}>
+                  {q}
+                </AppText>
+              </Row>
             ))}
           </View>
         )}
@@ -224,42 +224,33 @@ export default function AIMode() {
 
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
-          <AppText variant="title">Monthly review</AppText>
+          <Row style={{ gap: space.md }}>
+            <IconCircle icon="sparkles-outline" />
+            <AppText variant="title">Monthly review</AppText>
+          </Row>
           {!isPro && <ProBadge />}
         </Row>
         <AppText muted>A short, plain-language look at this month’s needs and wants, with three tips.</AppText>
-        {review ? (
-          <View style={{ gap: space.sm }}>
-            <AppText style={{ fontWeight: '700' }}>{review.headline}</AppText>
-            <View style={{ gap: 6 }}>
-              <Row style={{ justifyContent: 'space-between' }}>
-                <AppText variant="caption" muted>
+        {review && (
+          <View style={{ gap: space.md }}>
+            <Row style={{ gap: space.lg }}>
+              <ScoreRing score={review.safety_score} />
+              <View style={{ flex: 1, gap: 4 }}>
+                <AppText variant="label" muted>
                   Safety score
                 </AppText>
-                <AppText variant="caption" style={{ fontWeight: '700' }}>
-                  {Math.round(review.safety_score)}/100
-                </AppText>
-              </Row>
-              <View style={{ height: 8, borderRadius: 4, backgroundColor: c.surfaceAlt }}>
-                <View
-                  style={{
-                    height: 8,
-                    borderRadius: 4,
-                    width: `${Math.max(0, Math.min(100, review.safety_score))}%`,
-                    backgroundColor: review.safety_score >= 60 ? c.need : c.want,
-                  }}
-                />
+                <AppText variant="title">{review.headline}</AppText>
               </View>
-            </View>
+            </Row>
             <AppText>{review.summary}</AppText>
             {review.tips.map((tip) => (
-              <Row key={tip} style={{ alignItems: 'flex-start' }}>
-                <Ionicons name="leaf-outline" size={16} color={c.need} style={{ marginTop: 3 }} />
+              <Row key={tip} style={{ alignItems: 'flex-start', gap: space.md }}>
+                <Ionicons name="leaf" size={16} color={c.need} style={{ marginTop: 3 }} />
                 <AppText style={{ flex: 1 }}>{tip}</AppText>
               </Row>
             ))}
           </View>
-        ) : null}
+        )}
         <Button
           title={review ? 'Refresh review' : 'Get my review'}
           icon="sparkles-outline"
@@ -273,24 +264,15 @@ export default function AIMode() {
       {scans && scans.length > 0 && (
         <>
           <SectionTitle>Recent scans</SectionTitle>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md, paddingBottom: 6 }}>
             {scans.map((s) => (
-              <Pressable
+              <ScanCard
                 key={s.id}
+                uri={s.image_uri}
+                title={s.merchant ?? 'Receipt'}
+                subtitle={`${formatMoney(s.amount_cents, s.currency)} · ${formatDay(s.occurred_on, { month: 'short', day: 'numeric' })}`}
                 onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: s.id } })}
-                style={[styles.scanCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-                {s.image_uri ? (
-                  <Image source={{ uri: s.image_uri }} style={styles.thumb} contentFit="cover" />
-                ) : (
-                  <View style={[styles.thumb, { backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' }]}>
-                    <Ionicons name="receipt-outline" size={24} color={c.inkMuted} />
-                  </View>
-                )}
-                <AppText numberOfLines={1}>{s.merchant ?? 'Receipt'}</AppText>
-                <AppText variant="caption" muted>
-                  {formatMoney(s.amount_cents, s.currency)} · {formatDay(s.occurred_on, { month: 'short', day: 'numeric' })}
-                </AppText>
-              </Pressable>
+              />
             ))}
           </ScrollView>
         </>
@@ -311,9 +293,13 @@ export default function AIMode() {
       <Modal visible={busy === 'scan'} transparent animationType="fade">
         <View style={styles.busyBackdrop}>
           <View style={[styles.busyCard, { backgroundColor: c.surface }]}>
-            <ActivityIndicator size="large" color={c.primary} />
-            <AppText variant="title">Reading your receipt…</AppText>
-            <AppText muted style={{ textAlign: 'center' }}>
+            <Pulse>
+              <LogoMark size={72} />
+            </Pulse>
+            <AppText variant="title" center>
+              Reading your receipt…
+            </AppText>
+            <AppText muted center>
               The AI checks every line for totals and needs vs wants. This can take up to a minute.
             </AppText>
           </View>
@@ -325,16 +311,115 @@ export default function AIMode() {
 
 function ThinkingNote() {
   return (
-    <AppText variant="caption" muted style={{ textAlign: 'center' }}>
+    <AppText variant="caption" muted center>
       Thinking it through carefully. This can take up to a minute.
     </AppText>
   );
 }
 
+function Verdict({ verdict }: { verdict: CheckResult['verdict'] }) {
+  const c = useColors();
+  const v = {
+    go: { label: 'Reasonable buy', icon: 'checkmark-circle' as const, fg: c.needInk, bg: c.needSoft },
+    wait: { label: 'Sleep on it', icon: 'moon' as const, fg: c.wantInk, bg: c.wantSoft },
+    skip: { label: 'Probably skip', icon: 'close-circle' as const, fg: c.danger, bg: c.dangerSoft },
+  }[verdict];
+  return <Pill icon={v.icon} label={v.label} color={v.fg} bg={v.bg} />;
+}
+
+function Metric({ value, label }: { value: string; label: string }) {
+  const c = useColors();
+  return (
+    <View style={[styles.metric, { backgroundColor: c.surfaceAlt }]}>
+      <AppText variant="title" weight="extrabold">
+        {value}
+      </AppText>
+      <AppText variant="caption" muted>
+        {label}
+      </AppText>
+    </View>
+  );
+}
+
+/** Safety score as a ring: evergreen when strong, amber in the middle, red when low. */
+function ScoreRing({ score, size = 76 }: { score: number; size?: number }) {
+  const c = useColors();
+  const value = Math.max(0, Math.min(100, Math.round(score)));
+  const stroke = 8;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const color = value >= 60 ? c.need : value >= 40 ? c.want : c.danger;
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`Safety score ${value} out of 100`}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={c.surfaceAlt} strokeWidth={stroke} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={color}
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${(circ * value) / 100} ${circ}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <AppText style={{ fontFamily: fonts.extrabold, fontSize: 22, lineHeight: 26 }}>{value}</AppText>
+    </View>
+  );
+}
+
+function ScanCard({ uri, title, subtitle, onPress }: { uri: string | null; title: string; subtitle: string; onPress: () => void }) {
+  const c = useColors();
+  const dark = useIsDark();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.scanCard,
+        { backgroundColor: c.surface, opacity: pressed ? 0.8 : 1 },
+        dark ? { borderWidth: StyleSheet.hairlineWidth, borderColor: c.border } : elevation(false),
+      ]}>
+      {uri ? (
+        <Image source={{ uri }} style={styles.thumb} contentFit="cover" />
+      ) : (
+        <View style={[styles.thumb, { backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' }]}>
+          <Ionicons name="receipt-outline" size={26} color={c.inkMuted} />
+        </View>
+      )}
+      <AppText weight="semibold" numberOfLines={1}>
+        {title}
+      </AppText>
+      <AppText variant="caption" muted>
+        {subtitle}
+      </AppText>
+    </Pressable>
+  );
+}
+
+/** Gently breathes its child while the AI works. */
+function Pulse({ children }: { children: ReactNode }) {
+  const [scale] = useState(() => new Animated.Value(1));
+  useEffect(() => {
+    const native = Platform.OS !== 'web';
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.1, duration: 700, useNativeDriver: native }),
+        Animated.timing(scale, { toValue: 1, duration: 700, useNativeDriver: native }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [scale]);
+  return <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>;
+}
+
 const styles = StyleSheet.create({
-  heroIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  scanCard: { width: 150, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, padding: space.sm, gap: 4 },
-  thumb: { width: '100%', height: 110, borderRadius: radius.sm },
-  busyBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: space.xl },
-  busyCard: { borderRadius: radius.md, padding: space.xl, alignItems: 'center', gap: space.md, width: '100%', maxWidth: 360 },
+  metric: { flex: 1, borderRadius: radius.md, padding: space.md, gap: 2 },
+  scanCard: { width: 156, borderRadius: radius.md, padding: space.sm, gap: 4 },
+  thumb: { width: '100%', height: 112, borderRadius: radius.sm, marginBottom: 4 },
+  busyBackdrop: { flex: 1, backgroundColor: 'rgba(10,20,17,0.45)', alignItems: 'center', justifyContent: 'center', padding: space.xl },
+  busyCard: { borderRadius: radius.lg, padding: space.xl, alignItems: 'center', gap: space.md, width: '100%', maxWidth: 360 },
 });

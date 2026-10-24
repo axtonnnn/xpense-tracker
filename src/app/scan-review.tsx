@@ -1,14 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useMemo, useState } from 'react';
-import { Platform, Pressable, Switch, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { DatePicker } from '@/components/DatePicker';
-import { NeedWantToggle, SplitBar } from '@/components/money-ui';
-import { AppText, Banner, Button, Card, EmptyState, Field, Row, Screen } from '@/components/ui';
+import { ReceiptScan } from '@/components/illustrations';
+import { NeedWantToggle } from '@/components/money-ui';
+import { useToast } from '@/components/Toast';
+import { AppText, Banner, Button, Card, Divider, EmptyState, Pill, Row, Screen, Toggle } from '@/components/ui';
 import { newId } from '@/db/ids';
 import { addRecurring, applyDueRecurring } from '@/db/recurring';
 import { useSettings } from '@/db/settings';
@@ -16,16 +17,20 @@ import { saveScannedReceipt } from '@/db/transactions';
 import { categoryInfo } from '@/lib/categories';
 import { addMonths, isValidISODate, today } from '@/lib/dates';
 import { persistReceiptImage } from '@/lib/files';
-import { centsToInput, formatMoney, parseAmount } from '@/lib/money';
+import { centsToInput, currencySymbol, formatMoney, parseAmount } from '@/lib/money';
 import { draftWarnings, itemsTotal, splitTotal, WARNING_TEXT, type DraftItem, type ReceiptDraft } from '@/lib/receipt';
+import { maybeAskForReview } from '@/lib/review';
 import { clearPendingScan, takePendingScan } from '@/lib/scan';
-import { radius, space, useColors } from '@/theme/tokens';
+import { fonts, radius, space, useColors } from '@/theme/tokens';
+
+const DOC_LABEL = { receipt: 'Receipt', bill: 'Bill', invoice: 'Invoice', other: 'Document' } as const;
 
 export default function ScanReview() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const pending = takePendingScan(id);
   const db = useSQLiteContext();
   const c = useColors();
+  const toast = useToast();
   const settings = useSettings();
   const [draft, setDraft] = useState<ReceiptDraft | null>(pending?.draft ?? null);
   const [totalText, setTotalText] = useState(pending ? centsToInput(pending.draft.totalCents) : '');
@@ -33,14 +38,15 @@ export default function ScanReview() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const split = useMemo(() => (draft ? splitTotal(draft) : { need: 0, want: 0 }), [draft]);
-  const warnings = useMemo(() => (draft ? draftWarnings(draft) : []), [draft]);
+  const totalCents = parseAmount(totalText) ?? 0;
+  const split = useMemo(() => (draft ? splitTotal({ ...draft, totalCents }) : { need: 0, want: 0 }), [draft, totalCents]);
+  const warnings = useMemo(() => (draft ? draftWarnings({ ...draft, totalCents }) : []), [draft, totalCents]);
 
   if (!pending || !draft) {
     return (
       <Screen>
         <EmptyState
-          icon="scan-outline"
+          illustration={<ReceiptScan />}
           title="Nothing to review"
           body="This scan has expired. Scan the receipt again from AI mode."
           action={<Button title="Back to AI mode" onPress={() => router.back()} />}
@@ -54,22 +60,22 @@ export default function ScanReview() {
   const update = (patch: Partial<ReceiptDraft>) => setDraft({ ...draft, ...patch });
   const updateItem = (key: string, patch: Partial<DraftItem>) =>
     update({ items: draft.items.map((it) => (it.key === key ? { ...it, ...patch } : it)) });
+  const total = split.need + split.want;
 
   const save = async () => {
     setError(null);
-    const total = parseAmount(totalText);
-    if (!total || total <= 0) return setError('Enter the total before saving.');
+    if (totalCents <= 0) return setError('Enter the total before saving.');
     if (!isValidISODate(draft.date)) return setError('Pick a valid date.');
     setSaving(true);
     try {
-      const final = { ...draft, totalCents: total };
+      const final = { ...draft, totalCents };
       const imageUri = persistReceiptImage(pending.imageUri, newId());
       await saveScannedReceipt(db, final, imageUri, pending.raw);
       if (makeRecurring && draft.docType === 'bill') {
         await addRecurring(db, {
           type: 'expense',
           label: draft.merchant || 'Bill',
-          amountCents: total,
+          amountCents: totalCents,
           category: draft.category,
           necessity: draft.necessity,
           cadence: 'monthly',
@@ -79,8 +85,9 @@ export default function ScanReview() {
         await applyDueRecurring(db, today(), currency);
       }
       clearPendingScan(id);
-      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      toast({ message: `${draft.merchant || DOC_LABEL[draft.docType]} saved · ${formatMoney(totalCents, currency)}` });
       router.dismissTo('/history');
+      maybeAskForReview(db);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save. Please try again.');
     } finally {
@@ -90,130 +97,175 @@ export default function ScanReview() {
 
   return (
     <Screen>
+      <Card style={{ flexDirection: 'row', gap: space.lg, alignItems: 'stretch' }}>
+        <Image
+          source={{ uri: pending.imageUri }}
+          style={[styles.photo, { backgroundColor: c.surfaceAlt }]}
+          contentFit="cover"
+          accessibilityLabel="Scanned photo"
+        />
+        <View style={{ flex: 1, gap: space.sm, justifyContent: 'space-between' }}>
+          <Pill icon="scan" label={DOC_LABEL[draft.docType]} color={c.primary} bg={c.primarySoft} />
+          <TextInput
+            value={draft.merchant}
+            onChangeText={(merchant) => update({ merchant })}
+            placeholder="Merchant"
+            placeholderTextColor={c.inkMuted}
+            accessibilityLabel="Merchant"
+            style={[styles.merchant, { color: c.ink, borderColor: c.border }]}
+          />
+          <View>
+            <AppText variant="label" muted>
+              Total
+            </AppText>
+            <Row style={[styles.totalRow, { borderColor: c.border }]}>
+              <AppText style={[styles.symbol, { color: c.inkMuted }]}>{currencySymbol(currency)}</AppText>
+              <TextInput
+                value={totalText}
+                onChangeText={setTotalText}
+                keyboardType="decimal-pad"
+                accessibilityLabel="Total"
+                style={[styles.total, { color: c.ink }]}
+              />
+            </Row>
+          </View>
+        </View>
+      </Card>
+
       {warnings.map((w) => (
         <Banner key={w} tone={w === 'no_total' || w === 'not_receipt' ? 'danger' : 'warn'}>
           {WARNING_TEXT[w]}
         </Banner>
       ))}
 
-      <Row style={{ alignItems: 'flex-start', gap: space.md }}>
-        <Image
-          source={{ uri: pending.imageUri }}
-          style={{ width: 84, height: 112, borderRadius: radius.sm, backgroundColor: c.surfaceAlt }}
-          contentFit="cover"
-          accessibilityLabel="Scanned photo"
-        />
-        <View style={{ flex: 1, gap: space.sm }}>
-          <Field label="Merchant" value={draft.merchant} onChangeText={(merchant) => update({ merchant })} />
-          <Field label="Total" value={totalText} onChangeText={setTotalText} keyboardType="decimal-pad" />
-        </View>
-      </Row>
-
       <View style={{ gap: space.sm }}>
-        <AppText variant="caption" muted>
+        <AppText variant="label" muted>
           Date
         </AppText>
         <DatePicker value={draft.date} onChange={(date) => update({ date })} />
       </View>
 
       <Card>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <AppText variant="title">Needs vs wants</AppText>
-          <SplitBar need={split.need} want={split.want} width={80} />
-        </Row>
-        <Row style={{ gap: space.lg }}>
-          <View>
-            <AppText style={{ fontWeight: '700' }}>{formatMoney(split.need, currency)}</AppText>
-            <AppText variant="caption" muted>
-              Needs
-            </AppText>
-          </View>
-          <View>
-            <AppText style={{ fontWeight: '700' }}>{formatMoney(split.want, currency)}</AppText>
-            <AppText variant="caption" muted>
-              Wants
-            </AppText>
-          </View>
+        <AppText variant="title">Needs vs wants</AppText>
+        <View style={styles.splitTrack}>
+          {split.need > 0 && <View style={{ flex: split.need, backgroundColor: c.need, borderRadius: 5 }} />}
+          {split.want > 0 && <View style={{ flex: split.want, backgroundColor: c.want, borderRadius: 5 }} />}
+          {total <= 0 && <View style={{ flex: 1, backgroundColor: c.surfaceAlt, borderRadius: 5 }} />}
+        </View>
+        <Row style={{ gap: space.xl }}>
+          <SplitValue color={c.need} label="Needs" value={formatMoney(split.need, currency)} />
+          <SplitValue color={c.want} label="Wants" value={formatMoney(split.want, currency)} />
         </Row>
         {draft.items.length === 0 && (
           <>
-            <AppText muted>No line items were found. Mark the whole {draft.docType} as:</AppText>
+            <AppText muted>No line items were found. Mark the whole {DOC_LABEL[draft.docType].toLowerCase()} as:</AppText>
             <NeedWantToggle value={draft.necessity} onChange={(necessity) => update({ necessity })} />
           </>
         )}
       </Card>
 
-      {draft.items.map((it) => (
-        <Card key={it.key} style={{ gap: space.sm }}>
-          <Row>
-            <TextInput
-              value={it.name}
-              onChangeText={(name) => updateItem(it.key, { name })}
-              style={{ flex: 1, color: c.ink, fontSize: 16, fontWeight: '600', padding: 0 }}
-              accessibilityLabel="Item name"
-            />
-            <Pressable
-              onPress={() => update({ items: draft.items.filter((x) => x.key !== it.key) })}
-              accessibilityLabel={`Remove ${it.name}`}
-              hitSlop={8}>
-              <Ionicons name="close-circle-outline" size={22} color={c.inkMuted} />
-            </Pressable>
-          </Row>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <NeedWantToggle value={it.necessity} onChange={(necessity) => updateItem(it.key, { necessity })} />
-            <ItemPrice
-              cents={it.totalCents}
-              label={`${it.name} price`}
-              onChange={(totalCents) => updateItem(it.key, { totalCents })}
-            />
-          </Row>
-          {it.reason && (
-            <AppText variant="caption" muted>
-              {categoryInfo(it.category, custom).label} · {it.reason}
+      {draft.items.length > 0 && (
+        <Card style={{ gap: 0, paddingVertical: space.sm }}>
+          <Row style={{ justifyContent: 'space-between', paddingVertical: space.sm }}>
+            <AppText variant="title">Items</AppText>
+            <AppText variant="caption" weight="semibold" muted>
+              {draft.items.length} · {formatMoney(itemsTotal(draft), currency)}
             </AppText>
-          )}
+          </Row>
+          {draft.items.map((it) => (
+            <View key={it.key}>
+              <Divider />
+              <View style={{ gap: space.sm, paddingVertical: space.md }}>
+                <Row>
+                  <TextInput
+                    value={it.name}
+                    onChangeText={(name) => updateItem(it.key, { name })}
+                    style={[styles.itemName, { color: c.ink }]}
+                    accessibilityLabel="Item name"
+                  />
+                  <ItemPrice cents={it.totalCents} label={`${it.name} price`} onChange={(totalCents) => updateItem(it.key, { totalCents })} />
+                  <Pressable
+                    onPress={() => update({ items: draft.items.filter((x) => x.key !== it.key) })}
+                    accessibilityLabel={`Remove ${it.name}`}
+                    hitSlop={8}>
+                    <Ionicons name="close-circle" size={22} color={c.border} />
+                  </Pressable>
+                </Row>
+                <NeedWantToggle value={it.necessity} onChange={(necessity) => updateItem(it.key, { necessity })} />
+                {it.reason && (
+                  <AppText variant="caption" muted numberOfLines={2}>
+                    {categoryInfo(it.category, custom).label} · {it.reason}
+                  </AppText>
+                )}
+              </View>
+            </View>
+          ))}
+          <Divider />
+          <Button
+            title="Add a line"
+            icon="add"
+            kind="ghost"
+            onPress={() =>
+              update({
+                items: [
+                  ...draft.items,
+                  { key: `new-${Date.now()}`, name: 'New item', qty: null, totalCents: 0, category: draft.category, necessity: 'need', reason: null },
+                ],
+              })
+            }
+          />
         </Card>
-      ))}
-
-      <Button
-        title="Add a line"
-        icon="add"
-        kind="ghost"
-        onPress={() =>
-          update({
-            items: [
-              ...draft.items,
-              { key: `new-${Date.now()}`, name: 'New item', qty: null, totalCents: 0, category: draft.category, necessity: 'need', reason: null },
-            ],
-          })
-        }
-      />
+      )}
 
       {draft.items.length > 0 && (
-        <AppText variant="caption" muted>
-          Items add up to {formatMoney(itemsTotal(draft), currency)}. Tax, tip and fees are shared between needs and wants in
-          proportion.
+        <AppText variant="caption" muted center>
+          Tax, tip and fees are shared between needs and wants in proportion.
         </AppText>
       )}
 
       {draft.notes && <Banner icon="chatbubble-ellipses-outline">{draft.notes}</Banner>}
 
       {draft.docType === 'bill' && (
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ flex: 1 }}>
-            <AppText>Repeat this bill monthly</AppText>
-            <AppText variant="caption" muted>
-              Xpense will add it each month and keep it out of your safe-to-spend.
-            </AppText>
-          </View>
-          <Switch value={makeRecurring} onValueChange={setMakeRecurring} trackColor={{ true: c.primary, false: c.border }} />
-        </Row>
+        <Card>
+          <Row style={{ justifyContent: 'space-between', gap: space.md }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <AppText weight="semibold">Repeat this bill monthly</AppText>
+              <AppText variant="caption" muted>
+                Xpense adds it each month and keeps it out of your safe-to-spend.
+              </AppText>
+            </View>
+            <Toggle value={makeRecurring} onValueChange={setMakeRecurring} label="Repeat this bill monthly" />
+          </Row>
+        </Card>
       )}
 
       {error && <Banner tone="danger">{error}</Banner>}
       <Button title="Save expense" icon="checkmark" onPress={save} loading={saving} />
-      <Button title="Discard" kind="ghost" onPress={() => { clearPendingScan(id); router.back(); }} />
+      <Button
+        title="Discard"
+        kind="ghost"
+        onPress={() => {
+          clearPendingScan(id);
+          router.back();
+        }}
+      />
     </Screen>
+  );
+}
+
+function SplitValue({ color, label, value }: { color: string; label: string; value: string }) {
+  return (
+    <View style={{ gap: 2 }}>
+      <AppText weight="extrabold" style={{ fontSize: 18 }}>
+        {value}
+      </AppText>
+      <Row style={{ gap: 6 }}>
+        <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: color }} />
+        <AppText variant="caption" weight="semibold" muted>
+          {label}
+        </AppText>
+      </Row>
+    </View>
   );
 }
 
@@ -231,16 +283,18 @@ function ItemPrice({ cents, label, onChange }: { cents: number; label: string; o
       }}
       keyboardType="decimal-pad"
       accessibilityLabel={label}
-      style={{
-        minWidth: 90,
-        textAlign: 'right',
-        color: c.ink,
-        fontSize: 16,
-        fontWeight: '700',
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingVertical: 4,
-      }}
+      style={[styles.price, { color: c.ink, backgroundColor: c.surfaceAlt }]}
     />
   );
 }
+
+const styles = StyleSheet.create({
+  photo: { width: 96, height: 128, borderRadius: radius.sm },
+  merchant: { fontFamily: fonts.bold, fontSize: 18, borderBottomWidth: 1, paddingVertical: 4, paddingHorizontal: 0, minWidth: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  totalRow: { gap: 4, borderBottomWidth: 1 },
+  symbol: { fontFamily: fonts.extrabold, fontSize: 20 },
+  total: { flex: 1, minWidth: 0, fontFamily: fonts.extrabold, fontSize: 28, paddingVertical: 2, paddingHorizontal: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  splitTrack: { flexDirection: 'row', height: 10, gap: 3 },
+  itemName: { flex: 1, minWidth: 0, fontFamily: fonts.semibold, fontSize: 16, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  price: { width: 92, textAlign: 'right', fontFamily: fonts.bold, fontSize: 16, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, outlineStyle: 'solid', outlineWidth: 0 },
+});

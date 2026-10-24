@@ -2,17 +2,11 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { View } from 'react-native';
 
-
 import { NeedWantToggle } from './money-ui';
-import { AppText, Button, Chip, Field, Row } from './ui';
+import { AppText, Button, Card, Chip, Field, Row } from './ui';
 import type { Necessity } from '../../shared/schemas';
 import { setSettings } from '@/db/settings';
-import {
-  CATEGORY_INFO,
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  type CustomCategory,
-} from '@/lib/categories';
+import { CATEGORY_INFO, EXPENSE_CATEGORIES, INCOME_CATEGORIES, type CustomCategory } from '@/lib/categories';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { space } from '@/theme/tokens';
 
@@ -48,18 +42,12 @@ export function CategoryPicker({
   };
 
   return (
-    <View style={{ gap: space.sm }}>
+    <View style={{ gap: space.md }}>
       <Row style={{ flexWrap: 'wrap' }}>
         {ids.map((id) => {
           const info = CATEGORY_INFO[id as keyof typeof CATEGORY_INFO];
           return (
-            <Chip
-              key={id}
-              label={info.label}
-              icon={info.icon}
-              selected={value === id}
-              onPress={() => onChange(id, info.necessity)}
-            />
+            <Chip key={id} label={info.label} icon={info.icon} selected={value === id} onPress={() => onChange(id, info.necessity)} />
           );
         })}
         {type === 'expense' &&
@@ -84,17 +72,18 @@ export function CategoryPicker({
         )}
       </Row>
       {adding && (
-        <View style={{ gap: space.sm }}>
-          <Field label="Category name" value={label} onChangeText={setLabel} placeholder="e.g. Pet care" maxLength={24} />
-          <AppText variant="caption" muted>
+        <Card>
+          <AppText variant="title">New category</AppText>
+          <Field value={label} onChangeText={setLabel} placeholder="e.g. Pet care" maxLength={24} autoFocus />
+          <AppText variant="caption" weight="semibold" muted>
             Usually a…
           </AppText>
           <NeedWantToggle value={necessity} onChange={setNecessity} />
           <Row>
-            <Button title="Add category" onPress={save} style={{ flex: 1 }} />
+            <Button title="Add category" icon="add" onPress={save} style={{ flex: 1 }} />
             <Button title="Cancel" kind="ghost" onPress={() => setAdding(false)} />
           </Row>
-        </View>
+        </Card>
       )}
     </View>
   );

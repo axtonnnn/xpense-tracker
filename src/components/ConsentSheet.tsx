@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Modal, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText, Button, Row } from './ui';
+import { AppText, Button, IconCircle, Row } from './ui';
 import { radius, space, useColors } from '@/theme/tokens';
 
 export const AI_DISCLOSURE = [
@@ -15,15 +15,16 @@ export function ConsentSheet({ visible, onAllow, onCancel }: { visible: boolean;
   const c = useColors();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: c.surface }]}>
-          <Row>
-            <Ionicons name="shield-checkmark" size={24} color={c.primary} />
-            <AppText variant="title">Allow AI to read your receipts?</AppText>
-          </Row>
+      <Pressable style={styles.backdrop} onPress={onCancel} accessibilityLabel="Close">
+        <Pressable style={[styles.sheet, { backgroundColor: c.surface }]} onPress={() => undefined}>
+          <View style={[styles.grabber, { backgroundColor: c.border }]} />
+          <IconCircle icon="shield-checkmark" size={52} />
+          <AppText variant="display" style={{ fontSize: 24, lineHeight: 30 }}>
+            Allow AI to read your receipts?
+          </AppText>
           {AI_DISCLOSURE.map((line) => (
-            <Row key={line} style={{ alignItems: 'flex-start' }}>
-              <Ionicons name="checkmark-circle-outline" size={18} color={c.primary} style={{ marginTop: 2 }} />
+            <Row key={line} style={{ alignItems: 'flex-start', gap: space.md }}>
+              <Ionicons name="checkmark-circle" size={20} color={c.need} style={{ marginTop: 1 }} />
               <AppText style={{ flex: 1 }}>{line}</AppText>
             </Row>
           ))}
@@ -32,13 +33,14 @@ export function ConsentSheet({ visible, onAllow, onCancel }: { visible: boolean;
           </AppText>
           <Button title="Allow and continue" icon="sparkles" onPress={onAllow} />
           <Button title="Not now" kind="ghost" onPress={onCancel} />
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { padding: space.xl, gap: space.md, borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md, paddingBottom: space.xxl },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(10,20,17,0.45)' },
+  sheet: { padding: space.xl, gap: space.md, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingBottom: space.xxl + 8 },
+  grabber: { width: 40, height: 5, borderRadius: 3, alignSelf: 'center', marginBottom: space.sm },
 });

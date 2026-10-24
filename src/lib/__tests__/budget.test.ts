@@ -2,6 +2,8 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   categoryBreakdown,
+  comparePeriods,
+  pctChange,
   chartSeries,
   emptyBuckets,
   hourlyRateCents,
@@ -151,5 +153,21 @@ describe('hours of work', () => {
     expect(hoursOfWork(5000, rate)).toBe(2.5);
     expect(hoursOfWork(5000, null)).toBeNull();
     expect(hourlyRateCents(0, 40)).toBeNull();
+  });
+});
+
+describe('comparePeriods', () => {
+  it('compares month-to-date with the same days of last month', () => {
+    const txs = [inc('2026-09-01', 300000), exp('2026-09-10', 20000, 5000), exp('2026-09-28', 99999, 0), inc('2026-10-01', 300000), exp('2026-10-12', 15000, 2000)];
+    const { current, previous } = comparePeriods(txs, 'month', '2026-10-23');
+    expect(current).toMatchObject({ income: 300000, spent: 17000 });
+    expect(previous).toMatchObject({ income: 300000, spent: 25000 }); // Sep 28 is after "Sep 23", so it's left out
+    expect(pctChange(current.spent, previous.spent)).toBe(-32);
+    expect(pctChange(5, 0)).toBeNull();
+  });
+
+  it('reports the monthly budget for the safe-to-spend meter', () => {
+    const s = safeToSpend({ today: '2026-10-23', txs: [], expectedIncomeCents: 300000, savingsGoalCents: 60000, recurring: [] });
+    expect(s.budget).toBe(240000);
   });
 });

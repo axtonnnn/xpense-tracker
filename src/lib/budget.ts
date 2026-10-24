@@ -137,6 +137,8 @@ export type SafeToSpend = {
   perDay: number;
   daysLeft: number;
   income: number;
+  /** What the month allows for spending: income minus the savings goal. */
+  budget: number;
   upcomingBills: number;
   status: SafeStatus;
 };
@@ -170,19 +172,30 @@ export function safeToSpend(input: {
   else if (amount < 0) status = 'over';
   else if (amount < budget * 0.2) status = 'tight';
   else status = 'safe';
-  return { amount, perDay, daysLeft, income, upcomingBills, status };
+  return { amount, perDay, daysLeft, income, budget, upcomingBills, status };
 }
 
-/** Wants so far this period vs the same stretch of the previous period. */
-export function wantsTrend(txs: MoneyTx[], period: Period, today: string): { current: number; previous: number; changePct: number | null } {
+/**
+ * This period so far vs the same stretch of the previous one (e.g. Oct 1–23 vs Sep 1–23), so a
+ * half-finished month is never compared with a whole one.
+ */
+export function comparePeriods(txs: MoneyTx[], period: Period, today: string): { current: Totals; previous: Totals } {
   const cur = periodRange(period, today);
   const prev = previousRange(period, today);
   const elapsed = diffDays(cur.start, today);
   const prevEnd = addDays(prev.start, elapsed) < prev.end ? addDays(prev.start, elapsed) : prev.end;
-  const current = totals(txs, cur.start, today).want;
-  const previous = totals(txs, prev.start, prevEnd).want;
-  const changePct = previous > 0 ? Math.round(((current - previous) / previous) * 100) : null;
-  return { current, previous, changePct };
+  return { current: totals(txs, cur.start, today), previous: totals(txs, prev.start, prevEnd) };
+}
+
+/** Whole-percent change, or null when there is nothing to compare against. */
+export function pctChange(current: number, previous: number): number | null {
+  return previous > 0 ? Math.round(((current - previous) / previous) * 100) : null;
+}
+
+/** Wants so far this period vs the same stretch of the previous period. */
+export function wantsTrend(txs: MoneyTx[], period: Period, today: string): { current: number; previous: number; changePct: number | null } {
+  const { current, previous } = comparePeriods(txs, period, today);
+  return { current: current.want, previous: previous.want, changePct: pctChange(current.want, previous.want) };
 }
 
 export type CategoryTotal = { category: string; need: number; want: number; total: number };

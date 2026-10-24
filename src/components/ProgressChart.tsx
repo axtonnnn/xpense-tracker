@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, G, Line, Path, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
 import { AppText, Row } from './ui';
 import type { Bucket } from '@/lib/budget';
 import { niceTicks, roundedTopBar } from '@/lib/chart';
 import { formatAxis, formatMoney } from '@/lib/money';
-import { radius, space, useColors } from '@/theme/tokens';
+import { fonts, radius, space, useColors } from '@/theme/tokens';
 
 const PLOT_H = 168;
 const X_AXIS_H = 24;
@@ -14,8 +14,8 @@ const Y_AXIS_W = 44;
 const TOP_PAD = 8;
 const GAP = 2; // surface gap between stacked segments
 const MIN_SEG = 2;
-// SVG text doesn't inherit the app font on web; use the system UI font there too.
-const SVG_FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' : undefined;
+// SVG text doesn't inherit styles, so set the brand font explicitly (loaded in the root layout).
+const SVG_FONT = fonts.semibold;
 
 type Props = {
   buckets: Bucket[];
@@ -42,8 +42,9 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
   const y = (v: number) => TOP_PAD + (PLOT_H - TOP_PAD) * (1 - v / top);
   const base = y(0);
   const cx = (i: number) => Y_AXIS_W + slot * i + slot / 2;
-  const sel = buckets[selected];
   const empty = maxValue === 0;
+  // Nothing to read out in an empty period: drop the readout and the highlight, keep the axis.
+  const sel = empty ? undefined : buckets[selected];
 
   const incomePoints = buckets.map((b, i) => ({ x: cx(i), y: y(b.income), v: b.income }));
 
@@ -51,10 +52,10 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
     <View style={{ gap: space.md }}>
       {sel && (
         <View style={[styles.readout, { backgroundColor: c.surfaceAlt }]} accessibilityLiveRegion="polite">
-          <AppText variant="caption" muted>
+          <AppText variant="label" muted>
             {sel.label}
           </AppText>
-          <Row style={{ gap: space.lg, flexWrap: 'wrap' }}>
+          <Row style={{ gap: space.xl, flexWrap: 'wrap' }}>
             <Reading color={c.need} kind="rect" value={formatMoney(sel.need, currency)} label="Needs" />
             <Reading color={c.want} kind="rect" value={formatMoney(sel.want, currency)} label="Wants" />
             <Reading color={c.income} kind={incomeLine ? 'line' : 'dot'} value={formatMoney(sel.income, currency)} label="Income" />
@@ -139,9 +140,8 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
                   x={cx(i)}
                   y={PLOT_H + 17}
                   fontSize={11}
-                  fontFamily={SVG_FONT}
-                  fontWeight={i === selected ? '700' : '400'}
-                  fill={i === selected ? c.ink : c.inkMuted}
+                  fontFamily={sel && i === selected ? fonts.extrabold : SVG_FONT}
+                  fill={sel && i === selected ? c.ink : c.inkMuted}
                   textAnchor="middle">
                   {b.label}
                 </SvgText>
@@ -179,7 +179,7 @@ export function ProgressChart({ buckets, currency, selected, onSelect, incomeLin
           <LegendKey color={c.income} kind={incomeLine ? 'line' : 'dot'} label="Income" />
         </Row>
         <Pressable onPress={() => setShowTable((v) => !v)} accessibilityRole="button" hitSlop={8}>
-          <AppText variant="caption" color={c.primary} style={{ fontWeight: '700' }}>
+          <AppText variant="caption" weight="bold" color={c.primary}>
             {showTable ? 'Show chart' : 'Show table'}
           </AppText>
         </Pressable>
@@ -200,7 +200,7 @@ function LegendKey({ color, kind, label }: { color: string; kind: KeyKind; label
   return (
     <Row style={{ gap: 6 }}>
       <Key color={color} kind={kind} />
-      <AppText variant="caption" muted>
+      <AppText variant="caption" weight="semibold" muted>
         {label}
       </AppText>
     </Row>
@@ -210,7 +210,9 @@ function LegendKey({ color, kind, label }: { color: string; kind: KeyKind; label
 function Reading({ color, kind, value, label }: { color: string; kind: KeyKind; value: string; label: string }) {
   return (
     <View style={{ gap: 2 }}>
-      <AppText style={{ fontWeight: '700' }}>{value}</AppText>
+      <AppText weight="extrabold" style={{ fontSize: 17 }}>
+        {value}
+      </AppText>
       <Row style={{ gap: 6 }}>
         <Key color={color} kind={kind} />
         <AppText variant="caption" muted>
@@ -253,6 +255,6 @@ function ChartTable({ buckets, currency }: { buckets: Bucket[]; currency: string
 }
 
 const styles = StyleSheet.create({
-  readout: { borderRadius: radius.sm, padding: space.md, gap: space.sm },
+  readout: { borderRadius: radius.md, padding: space.md, paddingHorizontal: space.lg, gap: 6 },
   tableRow: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
 });

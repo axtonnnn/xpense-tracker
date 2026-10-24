@@ -1,10 +1,10 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, SectionList, View } from 'react-native';
+import { ScrollView, SectionList, StyleSheet, View } from 'react-native';
 
+import { LeafSearch } from '@/components/illustrations';
 import { TxRow } from '@/components/money-ui';
-import { AppText, Chip, EmptyState, Field, Row } from '@/components/ui';
+import { AppText, Card, Chip, EmptyState, Field, IconButton, Row } from '@/components/ui';
 import { useLiveQuery } from '@/db/live';
 import { useSettings } from '@/db/settings';
 import { listBetween, type Tx } from '@/db/transactions';
@@ -12,7 +12,7 @@ import { totals } from '@/lib/budget';
 import { categoryInfo } from '@/lib/categories';
 import { addMonths, endOfMonth, formatDay, formatMonth, startOfMonth, today } from '@/lib/dates';
 import { formatMoney } from '@/lib/money';
-import { radius, space, useColors } from '@/theme/tokens';
+import { elevation, radius, space, useColors, useIsDark } from '@/theme/tokens';
 
 type Filter = 'all' | 'expense' | 'income' | 'need' | 'want';
 const FILTERS: { value: Filter; label: string }[] = [
@@ -35,6 +35,7 @@ function matches(tx: Tx, filter: Filter, q: string, label: string): boolean {
 
 export default function History() {
   const c = useColors();
+  const dark = useIsDark();
   const settings = useSettings();
   const [month, setMonth] = useState(startOfMonth(today()));
   const [filter, setFilter] = useState<Filter>('all');
@@ -58,85 +59,108 @@ export default function History() {
 
   const tot = totals(txs ?? [], from, to);
   const isCurrentMonth = month === startOfMonth(today());
+  const filtered = query.trim() !== '' || filter !== 'all';
 
   return (
     <SectionList
       style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl * 2, gap: 0 }}
+      contentContainerStyle={{ padding: space.lg, paddingBottom: 120 }}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       sections={sections}
       keyExtractor={(tx) => tx.id}
       stickySectionHeadersEnabled={false}
+      showsVerticalScrollIndicator={false}
       ListHeaderComponent={
-        <View style={{ gap: space.md, marginBottom: space.md }}>
+        <View style={{ gap: space.md, marginBottom: space.sm }}>
           <Row style={{ justifyContent: 'space-between' }}>
-            <Pressable onPress={() => setMonth(addMonths(month, -1, 1))} accessibilityLabel="Previous month" hitSlop={10}>
-              <Ionicons name="chevron-back" size={24} color={c.primary} />
-            </Pressable>
+            <IconButton icon="chevron-back" label="Previous month" onPress={() => setMonth(addMonths(month, -1, 1))} />
             <AppText variant="title">{formatMonth(month)}</AppText>
-            <Pressable
-              onPress={() => !isCurrentMonth && setMonth(addMonths(month, 1, 1))}
-              accessibilityLabel="Next month"
-              accessibilityState={{ disabled: isCurrentMonth }}
-              hitSlop={10}>
-              <Ionicons name="chevron-forward" size={24} color={isCurrentMonth ? c.border : c.primary} />
-            </Pressable>
-          </Row>
-          <Row style={{ backgroundColor: c.surface, borderRadius: radius.md, padding: space.md, justifyContent: 'space-around' }}>
-            <View style={{ alignItems: 'center' }}>
-              <AppText variant="caption" muted>
-                In
-              </AppText>
-              <AppText style={{ fontWeight: '700' }}>{formatMoney(tot.income, currency)}</AppText>
-            </View>
-            <View style={{ alignItems: 'center' }}>
-              <AppText variant="caption" muted>
-                Out
-              </AppText>
-              <AppText style={{ fontWeight: '700' }}>{formatMoney(tot.spent, currency)}</AppText>
-            </View>
-            <View style={{ alignItems: 'center' }}>
-              <AppText variant="caption" muted>
-                Wants
-              </AppText>
-              <AppText style={{ fontWeight: '700' }}>{formatMoney(tot.want, currency)}</AppText>
+            <View style={{ opacity: isCurrentMonth ? 0.35 : 1 }}>
+              <IconButton icon="chevron-forward" label="Next month" onPress={() => !isCurrentMonth && setMonth(addMonths(month, 1, 1))} />
             </View>
           </Row>
-          <Field value={query} onChangeText={setQuery} placeholder="Search merchant, note or category" clearButtonMode="while-editing" />
-          <Row style={{ flexWrap: 'wrap' }}>
+          <Card style={{ flexDirection: 'row', paddingVertical: space.md }}>
+            <Summary label="In" value={formatMoney(tot.income, currency)} color={c.positive} />
+            <View style={[styles.vr, { backgroundColor: c.border }]} />
+            <Summary label="Out" value={formatMoney(tot.spent, currency)} />
+            <View style={[styles.vr, { backgroundColor: c.border }]} />
+            <Summary label="Wants" value={formatMoney(tot.want, currency)} color={c.wantInk} />
+          </Card>
+          <Field icon="search" value={query} onChangeText={setQuery} placeholder="Search merchant, note or category" clearButtonMode="while-editing" />
+          {/* Bleed to the screen edges so it is obvious the chips scroll. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginHorizontal: -space.lg }}
+            contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.lg }}>
             {FILTERS.map((f) => (
               <Chip key={f.value} label={f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} />
             ))}
-          </Row>
+          </ScrollView>
         </View>
       }
       renderSectionHeader={({ section }) => {
         const out = section.data.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount_cents, 0);
         return (
-          <Row style={{ justifyContent: 'space-between', marginTop: space.md, marginBottom: 2 }}>
-            <AppText variant="caption" muted style={{ fontWeight: '700' }}>
+          <Row style={{ justifyContent: 'space-between', marginTop: space.lg, marginBottom: space.xs, paddingHorizontal: space.xs }}>
+            <AppText variant="label" muted>
               {formatDay(section.day)}
             </AppText>
             {out > 0 && (
-              <AppText variant="caption" muted>
+              <AppText variant="caption" weight="semibold" muted>
                 −{formatMoney(out, currency)}
               </AppText>
             )}
           </Row>
         );
       }}
-      renderItem={({ item }) => (
-        <TxRow tx={item} custom={custom} onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: item.id } })} />
+      renderItem={({ item, index, section }) => (
+        <View
+          style={[
+            styles.rowCard,
+            { backgroundColor: c.surface },
+            index === 0 && styles.first,
+            index === section.data.length - 1 && styles.last,
+            dark && { borderLeftWidth: StyleSheet.hairlineWidth, borderRightWidth: StyleSheet.hairlineWidth, borderColor: c.border },
+            dark && index === 0 && { borderTopWidth: StyleSheet.hairlineWidth },
+            dark && index === section.data.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth },
+            !dark && index === section.data.length - 1 && elevation(false),
+          ]}>
+          {index > 0 && <View style={[styles.sep, { backgroundColor: c.border }]} />}
+          <TxRow tx={item} custom={custom} onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: item.id } })} />
+        </View>
       )}
       ListEmptyComponent={
         txs ? (
           <EmptyState
-            icon="receipt-outline"
-            title={query || filter !== 'all' ? 'Nothing matches' : 'No entries this month'}
-            body={query || filter !== 'all' ? 'Try another search or filter.' : 'Add expenses in Tracker or scan a receipt in AI mode.'}
+            illustration={<LeafSearch />}
+            title={filtered ? 'Nothing matches' : 'No entries this month'}
+            body={filtered ? 'Try another search or filter.' : 'Add expenses in Tracker or scan a receipt in AI mode.'}
           />
         ) : undefined
       }
     />
   );
 }
+
+function Summary({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+      <AppText variant="label" muted>
+        {label}
+      </AppText>
+      <AppText weight="extrabold" color={color} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </AppText>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  rowCard: { paddingHorizontal: space.md },
+  first: { borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md, paddingTop: 2 },
+  last: { borderBottomLeftRadius: radius.md, borderBottomRightRadius: radius.md, paddingBottom: 2 },
+  sep: { height: StyleSheet.hairlineWidth, marginLeft: 64 },
+  vr: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
+});

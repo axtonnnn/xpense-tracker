@@ -4,10 +4,12 @@ An AI expense & income tracker that helps people **spend on real needs, not want
 Snap a receipt or bill and AI turns it into categorized expenses. Each line is sorted into a need or a want, and the dashboard shows how much is safe to spend.
 
 <p>
-  <img src="docs/screenshots/dashboard.png" width="200" alt="Dashboard with progress chart">
-  <img src="docs/screenshots/ai-mode.png" width="200" alt="AI mode">
-  <img src="docs/screenshots/scan-review.png" width="200" alt="Reviewing a scanned receipt">
-  <img src="docs/screenshots/history.png" width="200" alt="History">
+  <img src="docs/screenshots/dashboard.png" width="180" alt="Dashboard with progress chart">
+  <img src="docs/screenshots/ai-mode.png" width="180" alt="AI mode">
+  <img src="docs/screenshots/scan-review.png" width="180" alt="Reviewing a scanned receipt">
+  <img src="docs/screenshots/tracker.png" width="180" alt="Tracker">
+  <img src="docs/screenshots/history.png" width="180" alt="History">
+  <img src="docs/screenshots/dashboard-dark.png" width="180" alt="Dashboard in dark mode">
 </p>
 
 ## Features
@@ -23,7 +25,11 @@ Snap a receipt or bill and AI turns it into categorized expenses. Each line is s
 | **AI monthly review** with a safety score and 3 tips | — | ✓ |
 | CSV export, custom categories | — | ✓ |
 
-- **Design:** "safe, calm, conserving": evergreen for needs and trust, amber for wants, a shield-and-leaf mark, light and dark themes. The chart colors pass a colorblind-safety and contrast check.
+- **Design:** "safe, calm, conserving".
+  - **Logo:** four leaves crossing in an X. Needs are on one diagonal, wants on the other.
+  - **Look:** evergreen on parchment, with Manrope type and light and dark themes.
+  - **Accessibility:** chart and text colours were checked for colour blindness and WCAG AA contrast.
+  - See the [brand guide](docs/brand/README.md).
 - **Privacy:** all budgeting data stays **on the phone** in SQLite. There is no account and no bank login. AI features ask for consent first.
 
 ## How it works
@@ -45,12 +51,16 @@ Phone (Expo app)                              Cloudflare Worker (worker/)       
 ```
 src/app/              screens (Expo Router): (tabs)/index | ai | tracker | history, scan-review,
                       transaction/[id], settings, paywall, onboarding
-src/components/       design-system pieces, ProgressChart (react-native-svg), money widgets
+src/components/       design system (ui, brand, illustrations, tab bar, toasts), ProgressChart,
+                      money widgets, date and category pickers
+src/theme/tokens.ts   colours (light + dark), Manrope type scale, spacing, elevation
 src/db/               SQLite schema + migrations, repositories, live queries
 src/lib/              budget math, receipt splitting, categorize rules, AI client, Pro (RevenueCat)
 shared/schemas.ts     zod schemas shared by the app and the Worker
 worker/               Cloudflare Worker (AI proxy, entitlements) + tests
-docs/                 privacy policy, terms of use, screenshots
+assets/               app icon (xpense.icon for iOS 26, PNGs for Android/splash), logo SVGs
+scripts/brand/        generates every logo and icon file (npm run brand)
+docs/                 privacy policy, terms of use, brand guide, screenshots
 ```
 
 ## Run it locally
@@ -59,8 +69,10 @@ Requirements: Node 20+ and the **Expo Go** app on your phone.
 
 ```bash
 npm install
-npx expo start          # scan the QR code with Expo Go (iPhone camera or Android Expo Go)
+npx expo start --go     # scan the QR code with Expo Go (iPhone camera or Android Expo Go)
 ```
+
+`--go` matters: the project includes `expo-dev-client`, so plain `npx expo start` expects a development build (see step 3) instead of Expo Go.
 
 To try AI mode before deploying anything, create `.env.local` with:
 
@@ -76,6 +88,15 @@ Checks:
 npm run typecheck && npm run lint && npm test     # app
 cd worker && npm install && npm test              # AI Worker
 ```
+
+## Brand & design
+
+The [brand guide](docs/brand/README.md) covers the logo, colours, type, app icons and tone of voice.
+
+- **Logo and icons:**
+  - `scripts/brand/mark.mjs` holds the logo geometry, and `npm run brand` regenerates every logo, icon and splash file from it.
+  - On iOS 26 the app icon is an Icon Composer bundle (`assets/xpense.icon`). Needs and wants are separate glass layers, so the icon works in light, dark and tinted modes.
+- **Theme:** colours, the type scale and spacing live in `src/theme/tokens.ts`. Screens build from the primitives in `src/components/ui.tsx` rather than raw styles.
 
 ## 1. Deploy the AI server (Cloudflare Worker)
 
@@ -106,6 +127,8 @@ cd worker && npm install && npm test              # AI Worker
    - Copy the **public iOS SDK key** into `app.json` → `expo.extra.revenueCatIosKey`.
    - Copy a **secret API key** into the Worker with `npx wrangler secret put REVENUECAT_SECRET_KEY`.
 3. Host `docs/privacy-policy.md` and `docs/terms.md` (GitHub Pages works), fill in the bracketed placeholders, and put the URLs in `app.json` → `expo.extra.privacyUrl` / `termsUrl`. The paywall and Settings link to them, as Apple requires.
+   - Until `termsUrl` is set, iOS links to Apple's standard EULA instead.
+   - The privacy policy has no fallback. Development builds show a reminder on the paywall until `privacyUrl` is set.
 
 ## 3. Build and submit with EAS
 
@@ -156,6 +179,6 @@ The Pro fair-use caps cap your worst case. An extreme user who maxes out all thr
 |---|---|---|
 | `app.json` → `extra` | `apiUrl` | Worker URL (`demo` = sample answers in dev builds) |
 | | `revenueCatIosKey`, `revenueCatAndroidKey` | RevenueCat public SDK keys |
-| | `privacyUrl`, `termsUrl` | Hosted policy pages |
+| | `privacyUrl`, `termsUrl` | Hosted policy pages (without `termsUrl`, iOS links to Apple's standard EULA) |
 | `worker/wrangler.toml` | `FREE_TRIAL_SCANS`, `PRO_MONTHLY_SCANS`, `PRO_MONTHLY_CHECKS`, `PRO_MONTHLY_REVIEWS` | Trial size and Pro fair-use caps |
 | Worker secrets | `ANTHROPIC_API_KEY`, `REVENUECAT_SECRET_KEY` | Never commit these |

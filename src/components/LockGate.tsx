@@ -1,8 +1,8 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform, StyleSheet, View } from 'react-native';
 
+import { AppIcon } from './brand';
 import { AppText, Button } from './ui';
 import { useSettings } from '@/db/settings';
 import { space, useColors } from '@/theme/tokens';
@@ -51,12 +51,14 @@ export function LockGate({ children }: { children: ReactNode }) {
       {children}
       {enabled && locked && (
         <View style={[StyleSheet.absoluteFill, styles.overlay, { backgroundColor: c.bg }]}>
-          <Ionicons name="shield-checkmark" size={56} color={c.primary} />
-          <AppText variant="title">Xpense is locked</AppText>
-          <AppText muted style={{ textAlign: 'center' }}>
+          <AppIcon size={88} />
+          <AppText variant="display" center>
+            Xpense is locked
+          </AppText>
+          <AppText muted center>
             Your money data stays private on this phone.
           </AppText>
-          <Button title="Unlock" icon="lock-open-outline" onPress={unlock} style={{ alignSelf: 'stretch' }} />
+          <Button title="Unlock" icon="lock-open-outline" onPress={unlock} style={{ alignSelf: 'stretch', marginTop: space.md }} />
         </View>
       )}
     </>

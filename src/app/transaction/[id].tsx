@@ -6,15 +6,17 @@ import { View } from 'react-native';
 
 import { CategoryPicker } from '@/components/CategoryPicker';
 import { DatePicker } from '@/components/DatePicker';
-import { NeedWantToggle, SplitBar } from '@/components/money-ui';
-import { AppText, Banner, Button, Card, EmptyState, Field, Row, Screen } from '@/components/ui';
+import { LeafSearch } from '@/components/illustrations';
+import { CategoryIcon, NeedWantToggle, SplitBar } from '@/components/money-ui';
+import { useToast } from '@/components/Toast';
+import { AppText, Banner, Button, Card, Divider, EmptyState, Field, Pill, Row, Screen } from '@/components/ui';
 import type { Necessity } from '../../../shared/schemas';
 import { useLiveQuery } from '@/db/live';
 import { useSettings } from '@/db/settings';
 import { deleteTransaction, getTransaction, setItemNecessity, updateTransaction } from '@/db/transactions';
-import { defaultNecessity, type CustomCategory } from '@/lib/categories';
+import { categoryInfo, defaultNecessity, type CustomCategory } from '@/lib/categories';
 import { confirm } from '@/lib/confirm';
-import { isValidISODate } from '@/lib/dates';
+import { formatDay, isValidISODate } from '@/lib/dates';
 import { centsToInput, formatMoney, parseAmount } from '@/lib/money';
 import { radius, space, useColors } from '@/theme/tokens';
 
@@ -26,7 +28,7 @@ export default function TransactionScreen() {
   if (data === null) {
     return (
       <Screen>
-        <EmptyState icon="alert-circle-outline" title="Not found" body="This entry may have been deleted." />
+        <EmptyState illustration={<LeafSearch />} title="Not found" body="This entry may have been deleted." />
       </Screen>
     );
   }
@@ -43,6 +45,7 @@ function TransactionForm({
 }) {
   const db = useSQLiteContext();
   const c = useColors();
+  const toast = useToast();
   const [amount, setAmount] = useState(centsToInput(data.tx.amount_cents));
   const [merchant, setMerchant] = useState(data.tx.merchant ?? '');
   const [category, setCategory] = useState(data.tx.category);
@@ -54,6 +57,8 @@ function TransactionForm({
   const { tx, receipt, items } = data;
   const isExpense = tx.type === 'expense';
   const hasItems = items.length > 0;
+  const info = categoryInfo(tx.category, custom);
+  const source = tx.source === 'scan' ? 'Scanned with AI' : tx.source === 'recurring' ? 'Added by a repeat' : 'Added by you';
 
   const save = async () => {
     setError(null);
@@ -68,12 +73,14 @@ function TransactionForm({
       occurredOn: date,
       ...(isExpense && !hasItems ? { necessity } : {}),
     });
+    toast({ message: 'Changes saved' });
     router.back();
   };
 
   const remove = async () => {
     if (await confirm('Delete this entry?', 'This also removes its receipt photo from your phone.')) {
       await deleteTransaction(db, tx.id);
+      toast({ message: 'Entry deleted', icon: 'trash' });
       router.back();
     }
   };
@@ -81,10 +88,35 @@ function TransactionForm({
   return (
     <Screen>
       <Stack.Screen options={{ title: isExpense ? 'Expense' : 'Income' }} />
-      <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
-      <Field label={isExpense ? 'Where or what?' : 'From'} value={merchant} onChangeText={setMerchant} />
+
+      <Card style={{ alignItems: 'center', gap: space.sm, paddingVertical: space.xl }}>
+        <CategoryIcon category={tx.category} custom={custom} type={tx.type} necessity={tx.need_cents >= tx.want_cents ? 'need' : 'want'} size={56} />
+        <AppText variant="display" color={isExpense ? c.ink : c.positive}>
+          {isExpense ? '−' : '+'}
+          {formatMoney(tx.amount_cents, tx.currency)}
+        </AppText>
+        <AppText weight="semibold">{tx.merchant || info.label}</AppText>
+        <Row style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Pill icon="calendar-outline" label={formatDay(tx.occurred_on, { weekday: 'short', month: 'long', day: 'numeric' })} color={c.inkMuted} bg={c.surfaceAlt} />
+          <Pill icon={tx.source === 'scan' ? 'scan' : tx.source === 'recurring' ? 'repeat' : 'create-outline'} label={source} color={c.inkMuted} bg={c.surfaceAlt} />
+        </Row>
+        {isExpense && tx.need_cents > 0 && tx.want_cents > 0 && (
+          <View style={{ alignItems: 'center', gap: 6, marginTop: space.xs }}>
+            <SplitBar need={tx.need_cents} want={tx.want_cents} width={160} />
+            <AppText variant="caption" muted>
+              Needs {formatMoney(tx.need_cents, tx.currency)} · Wants {formatMoney(tx.want_cents, tx.currency)}
+            </AppText>
+          </View>
+        )}
+      </Card>
+
+      <AppText variant="label" muted>
+        Edit
+      </AppText>
+      <Field label="Amount" icon="cash-outline" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
+      <Field label={isExpense ? 'Where or what?' : 'From'} icon={isExpense ? 'storefront-outline' : 'briefcase-outline'} value={merchant} onChangeText={setMerchant} />
       <View style={{ gap: space.sm }}>
-        <AppText variant="caption" muted>
+        <AppText variant="caption" weight="semibold" muted>
           Category
         </AppText>
         <CategoryPicker
@@ -99,44 +131,39 @@ function TransactionForm({
       </View>
       {isExpense && !hasItems && (
         <View style={{ gap: space.sm }}>
-          <AppText variant="caption" muted>
+          <AppText variant="caption" weight="semibold" muted>
             Need or want?
           </AppText>
           <NeedWantToggle value={necessity} onChange={setNecessity} />
         </View>
       )}
       <View style={{ gap: space.sm }}>
-        <AppText variant="caption" muted>
+        <AppText variant="caption" weight="semibold" muted>
           Date
         </AppText>
         <DatePicker value={date} onChange={setDate} />
       </View>
-      <Field label="Note" value={note} onChangeText={setNote} placeholder="Optional" />
+      <Field label="Note" icon="create-outline" value={note} onChangeText={setNote} placeholder="Optional" />
 
       {receipt && (
         <Card>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <AppText variant="title">Receipt</AppText>
-            <SplitBar need={tx.need_cents} want={tx.want_cents} width={72} />
-          </Row>
+          <AppText variant="title">Receipt</AppText>
           {receipt.image_uri && (
             <Image
               source={{ uri: receipt.image_uri }}
-              style={{ width: '100%', height: 260, borderRadius: radius.sm, backgroundColor: c.surfaceAlt }}
+              style={{ width: '100%', height: 280, borderRadius: radius.md, backgroundColor: c.surfaceAlt }}
               contentFit="contain"
               accessibilityLabel="Receipt photo"
             />
           )}
-          <AppText variant="caption" muted>
-            Needs {formatMoney(tx.need_cents, tx.currency)} · Wants {formatMoney(tx.want_cents, tx.currency)}
-          </AppText>
-          {items.map((it) => (
-            <View key={it.id} style={{ gap: 6, paddingTop: space.sm, borderTopWidth: 1, borderColor: c.border }}>
-              <Row style={{ justifyContent: 'space-between' }}>
-                <AppText style={{ flex: 1 }} numberOfLines={2}>
+          {items.map((it, i) => (
+            <View key={it.id} style={{ gap: space.sm }}>
+              {i > 0 && <Divider />}
+              <Row style={{ justifyContent: 'space-between', paddingTop: i > 0 ? space.sm : 0 }}>
+                <AppText weight="semibold" style={{ flex: 1 }} numberOfLines={2}>
                   {it.name}
                 </AppText>
-                <AppText style={{ fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                <AppText weight="bold" style={{ fontVariant: ['tabular-nums'] }}>
                   {formatMoney(it.total_cents, tx.currency)}
                 </AppText>
               </Row>
@@ -145,8 +172,8 @@ function TransactionForm({
           ))}
           {(receipt.tax_cents ?? 0) + (receipt.tip_cents ?? 0) > 0 && (
             <AppText variant="caption" muted>
-              Tax and tip ({formatMoney((receipt.tax_cents ?? 0) + (receipt.tip_cents ?? 0), tx.currency)}) are shared
-              between needs and wants in proportion.
+              Tax and tip ({formatMoney((receipt.tax_cents ?? 0) + (receipt.tip_cents ?? 0), tx.currency)}) are shared between needs and wants in
+              proportion.
             </AppText>
           )}
         </Card>
@@ -154,7 +181,7 @@ function TransactionForm({
 
       {error && <Banner tone="danger">{error}</Banner>}
       <Button title="Save changes" icon="checkmark" onPress={save} />
-      <Button title="Delete" kind="danger" icon="trash-outline" onPress={remove} />
+      <Button title="Delete entry" kind="danger" icon="trash-outline" onPress={remove} />
     </Screen>
   );
 }

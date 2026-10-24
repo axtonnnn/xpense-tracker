@@ -53,13 +53,17 @@ export function formatMoney(cents: number, currency: string, opts: { compact?: b
   return formatter(currency, !!opts.compact).format(fromCents(cents));
 }
 
+/** The symbol the locale uses for a currency ("$", "€", "₹"), or the code when it has none. */
+export function currencySymbol(currency: string): string {
+  return formatMoney(0, currency, { compact: true }).replace(/[\d\s.,]/g, '') || currency;
+}
+
 /** Short axis labels: $1.2k, $950. */
 export function formatAxis(cents: number, currency: string): string {
   const major = cents / 100;
   if (Math.abs(major) >= 1000) {
     const k = major / 1000;
-    const symbol = formatMoney(0, currency, { compact: true }).replace(/[\d\s.,]/g, '');
-    return `${symbol}${k >= 10 ? Math.round(k) : k.toFixed(1)}k`;
+    return `${currencySymbol(currency)}${k >= 10 ? Math.round(k) : k.toFixed(1)}k`;
   }
   return formatMoney(cents, currency, { compact: true });
 }
