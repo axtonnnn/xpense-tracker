@@ -1,10 +1,11 @@
+<!-- Served by the AI server at /terms. {{TOKENS}} are filled in from the [vars] in worker/wrangler.toml. -->
 # Xpense Terms of Use
 
-_Last updated: [DATE]_
+_Last updated: {{LAST_UPDATED}}_
 
-These terms apply to your use of the Xpense app ("Xpense", "we", "us"). By using Xpense you agree to them. Apple's [Standard End User License Agreement](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/) also applies to downloads from the App Store. Replace the bracketed placeholders before publishing.
+These terms apply to your use of the Xpense app ("Xpense", "we", "us"). By using Xpense you agree to them. Apple's [Standard End User License Agreement](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/) also applies to downloads from the App Store.
 
-**Contact:** [your name or company], [your contact email]
+**Contact:** {{OWNER_NAME}}, {{CONTACT_EMAIL}}
 
 ## 1. What Xpense is (and isn't)
 
@@ -20,8 +21,8 @@ AI features (receipt and bill scanning, "Should I buy this?", monthly review) pr
 - If a free trial is offered, you will be charged when it ends unless you cancel at least 24 hours before it ends.
 - Payment is charged to your App Store or Google Play account when you confirm the purchase. The subscription renews automatically unless you cancel at least 24 hours before the end of the current period.
 - Manage or cancel any time in your App Store or Google Play account settings. Refunds are handled by Apple or Google under their policies.
-- Free accounts include 3 trial AI scans per install.
-- Pro includes fair-use limits to keep the service sustainable: 300 receipt scans, 300 purchase checks and 30 monthly reviews per calendar month. Limits reset on the 1st.
+- Free accounts include {{FREE_TRIAL_SCANS}} trial AI scans per install.
+- Pro includes fair-use limits to keep the service sustainable: {{PRO_MONTHLY_SCANS}} receipt scans, {{PRO_MONTHLY_CHECKS}} purchase checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month. Limits reset on the 1st.
 
 ## 4. Acceptable use
 
@@ -41,4 +42,4 @@ Xpense is provided "as is" without warranties of any kind, to the extent permitt
 
 ## 8. Governing law
 
-These terms are governed by the laws of [your country/state], without regard to conflict-of-law rules.
+These terms are governed by the laws of {{GOVERNING_LAW}}, without regard to conflict-of-law rules.

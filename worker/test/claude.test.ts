@@ -71,3 +71,17 @@ describe('createClaude', () => {
     await expect(createClaude('k', client).monthlyReview({} as never)).rejects.toMatchObject({ status: 503, code: 'ai_busy' });
   });
 });
+
+describe('checkKey', () => {
+  const withModels = (list: () => Promise<unknown>) => createClaude('k', { models: { list } } as unknown as Anthropic);
+
+  it('is ok when Anthropic lists models with the key', async () => {
+    expect(await withModels(async () => ({ data: [] })).checkKey()).toBe('ok');
+  });
+
+  it('reports a rejected key separately from an outage', async () => {
+    const rejected = new Anthropic.AuthenticationError(401, { type: 'error' }, 'invalid x-api-key', new Headers());
+    expect(await withModels(async () => Promise.reject(rejected)).checkKey()).toBe('invalid');
+    expect(await withModels(async () => Promise.reject(new Error('network'))).checkKey()).toBe('unreachable');
+  });
+});

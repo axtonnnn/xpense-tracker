@@ -1,10 +1,11 @@
+<!-- Served by the AI server at /privacy. {{TOKENS}} are filled in from the [vars] in worker/wrangler.toml. -->
 # Xpense Privacy Policy
 
-_Last updated: [DATE]_
+_Last updated: {{LAST_UPDATED}}_
 
-Xpense ("we", "us") is a budgeting app that helps you track income and expenses and spend on what you need. This policy explains what data the app handles and why. Replace the bracketed placeholders before publishing.
+Xpense ("we", "us") is a budgeting app that helps you track income and expenses and spend on what you need. This policy explains what data the app handles and why.
 
-**Contact:** [your name or company], [your contact email]
+**Contact:** {{OWNER_NAME}}, {{CONTACT_EMAIL}}
 
 ## The short version
 
@@ -20,7 +21,7 @@ Xpense ("we", "us") is a budgeting app that helps you track income and expenses 
 | Receipt photos you save | Shown with the transaction they belong to |
 | Settings (currency, expected income, savings goal, hours per week, preferences) | Safe-to-spend and "hours of work" calculations |
 
-This data stays in the app's private storage on your phone. It is removed when you use **Settings → Delete all data** or uninstall the app. You can export it at any time with **Settings → Export as CSV** (Pro).
+This data stays in the app's private storage on your phone. If you back up your phone to iCloud or a computer, the backup includes it, and we can't access those backups. It is removed when you use **Settings → Delete all data** or uninstall the app. You can export it at any time with **Settings → Export as CSV** (Pro).
 
 ## AI features (optional)
 
@@ -45,7 +46,7 @@ On first launch the app creates a random identifier (a UUID) and stores it secur
 - count your free trial scans and monthly fair-use limits (stored as small counters on our server: the ID, a count and a month),
 - link your Pro subscription to this install through RevenueCat.
 
-Monthly usage counters expire automatically after about 40 days. The free-trial counter is kept to prevent abuse of the free trial. Email us your Support ID (Settings → About) if you want it removed.
+Monthly usage counters expire automatically after about 40 days. The free-trial counter is kept to prevent abuse of the free trial. Email {{CONTACT_EMAIL}} with your Support ID (Settings → About) if you want it removed.
 
 ## Purchases
 
@@ -60,7 +61,7 @@ Subscriptions are processed by Apple (App Store) or Google (Google Play). We nev
 | RevenueCat | Manages subscription status |
 | Apple / Google | App distribution and payments |
 
-We do not use analytics, advertising or tracking SDKs, and we do not sell or share personal data for advertising.
+We do not use analytics, advertising or tracking SDKs, and we do not sell or share personal data for advertising. This website uses no cookies or analytics.
 
 ## Children
 
@@ -72,7 +73,7 @@ Xpense is not directed at children under 13, and we do not knowingly collect the
 - Delete all on-device data in Settings, or uninstall the app.
 - Contact us to ask about, or delete, the anonymous counters linked to your install ID. You'll find it in **Settings → About → Support ID**.
 
-Depending on where you live (for example under GDPR or CCPA), you may have additional rights to access or delete data. Contact us and we will respond within 30 days.
+Depending on where you live (for example under GDPR or CCPA), you may have additional rights to access or delete data. Contact us at {{CONTACT_EMAIL}} and we will respond within 30 days.
 
 ## Changes
 

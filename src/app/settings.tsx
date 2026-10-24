@@ -9,7 +9,7 @@ import { useToast } from '@/components/Toast';
 import { AppText, Button, Card, Chip, Divider, Field, HeroCard, ListRow, ProBadge, Row, Screen, Toggle } from '@/components/ui';
 import { setSettings, useSettings, type Settings } from '@/db/settings';
 import { allTransactions, deleteAllData } from '@/db/transactions';
-import { PRIVACY_URL, TERMS_URL } from '@/lib/config';
+import { PRIVACY_URL, PRO_MONTHLY_SCANS, SUPPORT_URL, TERMS_URL } from '@/lib/config';
 import { confirm, notify } from '@/lib/confirm';
 import { today } from '@/lib/dates';
 import { shareCSV } from '@/lib/export';
@@ -133,7 +133,9 @@ function SettingsForm({ settings }: { settings: Settings }) {
           <AppText variant="title" color={c.onHero}>
             Unlock the full AI toolkit
           </AppText>
-          <AppText color={c.onHeroMuted}>Unlimited receipt scanning, “Should I buy this?”, monthly reviews, yearly trends and CSV export.</AppText>
+          <AppText color={c.onHeroMuted}>
+            Up to {PRO_MONTHLY_SCANS} AI receipt scans a month, “Should I buy this?”, monthly reviews, yearly trends and CSV export.
+          </AppText>
           <Button title="See Pro plans" icon="sparkles" kind="hero" onPress={() => router.push('/paywall')} />
         </HeroCard>
       )}
@@ -253,6 +255,12 @@ function SettingsForm({ settings }: { settings: Settings }) {
 
       <Section title="About">
         <Card style={{ gap: 0, paddingVertical: space.sm }}>
+          {SUPPORT_URL ? (
+            <>
+              <ListRow icon="help-buoy-outline" title="Help & support" subtitle="Answers, and how to contact us" onPress={() => Linking.openURL(SUPPORT_URL)} />
+              <Divider />
+            </>
+          ) : null}
           <ListRow
             icon="refresh"
             title="Restore purchases"

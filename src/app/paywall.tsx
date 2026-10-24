@@ -8,7 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/brand';
 import { AppText, Banner, Button, Card, IconCircle, Row, type IconName } from '@/components/ui';
-import { PRIVACY_URL, TERMS_URL } from '@/lib/config';
+import { PRIVACY_URL, PRO_MONTHLY_SCANS, TERMS_URL } from '@/lib/config';
+import { notify } from '@/lib/confirm';
+import { PREVIEW_PLANS } from '@/lib/preview-plans';
 import { usePro } from '@/lib/pro';
 import { radius, space, useColors } from '@/theme/tokens';
 
@@ -63,7 +65,12 @@ export default function Paywall() {
   const insets = useSafeAreaInsets();
   const { feature } = useLocalSearchParams<{ feature?: string }>();
   const pro = usePro();
-  const packages = pro.offering?.availablePackages ?? [];
+  // Development builds without a store (Expo Go, web) show stand-in plans so the screen can be tried.
+  const preview = __DEV__ && !pro.storeReady;
+  const packages = preview ? PREVIEW_PLANS : (pro.offering?.availablePackages ?? []);
+  const trialFor = (p: PurchasesPackage) => (preview || pro.trialEligible(p.product.identifier) ? trialText(p) : null);
+  const previewOnly = () =>
+    notify('Preview only', 'Purchases work in TestFlight and App Store builds. To try Pro here, turn on Settings → Developer → Simulate Pro.');
   const [picked, setSelected] = useState<PurchasesPackage | null>(null);
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +84,7 @@ export default function Paywall() {
 
   const buy = async () => {
     if (!selected) return;
+    if (preview) return previewOnly();
     setError(null);
     setBusy('buy');
     try {
@@ -89,6 +97,7 @@ export default function Paywall() {
   };
 
   const restore = async () => {
+    if (preview) return previewOnly();
     setError(null);
     setBusy('restore');
     try {
@@ -101,9 +110,9 @@ export default function Paywall() {
     }
   };
 
-  const trial = selected ? trialText(selected) : null;
+  const trial = selected ? trialFor(selected) : null;
   const BENEFITS: { icon: IconName; text: string; tint: [string, string] }[] = [
-    { icon: 'scan', text: 'Unlimited AI receipt & bill scanning', tint: [c.primarySoft, c.primary] },
+    { icon: 'scan', text: `Up to ${PRO_MONTHLY_SCANS} AI receipt & bill scans a month`, tint: [c.primarySoft, c.primary] },
     { icon: 'bag-handle', text: '“Should I buy this?” before you spend', tint: [c.wantSoft, c.wantInk] },
     { icon: 'sparkles', text: 'Monthly AI review with a safety score', tint: [c.primarySoft, c.primary] },
     { icon: 'stats-chart', text: '6-month & yearly trends, spending by category', tint: [c.incomeSoft, c.income] },
@@ -143,7 +152,7 @@ export default function Paywall() {
             <View style={{ gap: space.sm }}>
               {packages.map((p) => {
                 const active = selected?.identifier === p.identifier;
-                const t = trialText(p);
+                const t = trialFor(p);
                 const annual = p.packageType === PACKAGE_TYPE.ANNUAL;
                 return (
                   <Pressable
@@ -200,7 +209,7 @@ export default function Paywall() {
           {error && <Banner tone="danger">{error}</Banner>}
 
           <Button title={trial ? `Start ${trial}` : 'Subscribe'} icon="sparkles" onPress={buy} loading={busy === 'buy'} disabled={!selected} />
-          <Button title="Restore purchases" kind="ghost" onPress={restore} loading={busy === 'restore'} disabled={!pro.storeReady} />
+          <Button title="Restore purchases" kind="ghost" onPress={restore} loading={busy === 'restore'} disabled={!pro.storeReady && !preview} />
 
           <AppText variant="caption" muted center>
             {selected
@@ -227,7 +236,8 @@ export default function Paywall() {
           </Row>
           {__DEV__ && !PRIVACY_URL && (
             <Banner tone="warn" icon="construct-outline">
-              Developer note: set extra.privacyUrl (and termsUrl) in app.json. App Review needs both links on this screen.
+              Developer note: the Terms and Privacy links appear once extra.apiUrl in app.json points at your AI server, which hosts both pages.
+              App Review needs them on this screen.
             </Banner>
           )}
         </View>

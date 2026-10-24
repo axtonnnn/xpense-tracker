@@ -1,5 +1,6 @@
 // Who may use which AI feature: Pro subscribers (checked with RevenueCat on the server, so a
 // modified app can't unlock it), plus a small free trial of receipt scans for everyone else.
+import type { KeyStatus } from './ai/claude';
 import type { Env } from './env';
 
 export type Feature = 'scan' | 'check' | 'review';
@@ -15,13 +16,13 @@ const MONTH_TTL = 60 * 60 * 24 * 40;
 /** Fair-use caps per Pro install per calendar month (override with the PRO_MONTHLY_* vars). */
 const DEFAULT_CAPS: Record<Feature, number> = { scan: 300, check: 300, review: 30 };
 
-function monthlyCap(env: Env, feature: Feature): number {
+export function monthlyCap(env: Env, feature: Feature): number {
   const raw = { scan: env.PRO_MONTHLY_SCANS, check: env.PRO_MONTHLY_CHECKS, review: env.PRO_MONTHLY_REVIEWS }[feature];
   const n = Number(raw ?? DEFAULT_CAPS[feature]);
   return Number.isFinite(n) ? n : DEFAULT_CAPS[feature];
 }
 
-const trialLimit = (env: Env) => Number(env.FREE_TRIAL_SCANS ?? 3);
+export const trialLimit = (env: Env) => Number(env.FREE_TRIAL_SCANS ?? 3);
 const trialKey = (id: string) => `trial:${id}`;
 const usageKey = (id: string, feature: Feature, now: Date) => `usage:${id}:${now.toISOString().slice(0, 7)}:${feature}`;
 
@@ -36,9 +37,7 @@ export async function isPro(env: Env, installId: string, fetchImpl: typeof fetch
   if ((await env.USAGE.get(cacheKey)) === '1') return true;
   if (!env.REVENUECAT_SECRET_KEY) return false;
 
-  const res = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(installId)}`, {
-    headers: { Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}`, Accept: 'application/json' },
-  });
+  const res = await fetchSubscriber(env, fetchImpl, installId);
   if (res.status === 404) return false;
   if (!res.ok) throw new Error(`RevenueCat responded ${res.status}`);
   const data = (await res.json()) as {
@@ -50,18 +49,35 @@ export async function isPro(env: Env, installId: string, fetchImpl: typeof fetch
   return active;
 }
 
+const fetchSubscriber = (env: Env, fetchImpl: typeof fetch, appUserId: string) =>
+  fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}`, {
+    headers: { Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}`, Accept: 'application/json' },
+  });
+
+/** Confirms RevenueCat accepts our secret key (for /health?deep=1). It only looks up a test customer. */
+export async function checkRevenueCatKey(env: Env, fetchImpl: typeof fetch): Promise<KeyStatus | 'missing'> {
+  if (!env.REVENUECAT_SECRET_KEY) return 'missing';
+  try {
+    const res = await fetchSubscriber(env, fetchImpl, 'xpense-key-check');
+    return res.ok ? 'ok' : res.status === 401 || res.status === 403 ? 'invalid' : 'unreachable';
+  } catch {
+    return 'unreachable';
+  }
+}
+
 export async function checkAccess(
   env: Env,
   installId: string,
   feature: Feature,
   deps: { fetchImpl: typeof fetch; now: Date },
 ): Promise<Access> {
-  let pro: boolean;
+  let pro = false;
+  let storeDown = false;
   try {
     pro = await isPro(env, installId, deps.fetchImpl, deps.now);
   } catch (e) {
     console.error('[entitlement]', e);
-    return { ok: false, status: 503, code: 'store_unavailable', message: 'Couldn’t confirm your subscription. Please try again shortly.' };
+    storeDown = true;
   }
 
   if (pro) {
@@ -77,12 +93,22 @@ export async function checkAccess(
     return { ok: true, plan: 'pro', trialUsed: 0 };
   }
 
+  // Free trial scans don't depend on RevenueCat, so they keep working through a RevenueCat outage.
+  // Anything that needs Pro waits until the subscription can be confirmed.
+  const unavailable: Access = { ok: false, status: 503, code: 'store_unavailable', message: 'Couldn’t confirm your subscription. Please try again shortly.' };
   if (feature !== 'scan') {
-    return { ok: false, status: 402, code: 'needs_pro', message: 'This AI feature is part of Xpense Pro.' };
+    return storeDown ? unavailable : { ok: false, status: 402, code: 'needs_pro', message: 'This AI feature is part of Xpense Pro.' };
   }
   const trialUsed = await readCount(env, trialKey(installId));
   if (trialUsed >= trialLimit(env)) {
-    return { ok: false, status: 402, code: 'trial_used', message: 'You’ve used your free AI scans. Upgrade to Pro for unlimited scanning.' };
+    return storeDown
+      ? unavailable
+      : {
+          ok: false,
+          status: 402,
+          code: 'trial_used',
+          message: `You’ve used your free AI scans. Xpense Pro includes up to ${monthlyCap(env, 'scan')} a month.`,
+        };
   }
   return { ok: true, plan: 'trial', trialUsed };
 }

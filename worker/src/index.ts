@@ -4,8 +4,9 @@ import type { z } from 'zod';
 
 import { CheckRequestSchema, ReviewRequestSchema, ScanRequestSchema } from '../../shared/schemas';
 import { AIError, createClaude, type AIProvider } from './ai/claude';
-import { checkAccess, recordUsage, type Feature } from './entitlement';
+import { checkAccess, checkRevenueCatKey, recordUsage, type Feature } from './entitlement';
 import type { Env } from './env';
+import { missingSettings, pageResponse } from './pages';
 
 export type Deps = {
   ai: (env: Env) => AIProvider;
@@ -88,8 +89,33 @@ export function createHandler(deps: Deps) {
 
   return async function handle(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
-    const { pathname } = new URL(request.url);
-    if (request.method === 'GET' && pathname === '/health') return json({ ok: true });
+    const url = new URL(request.url);
+    const { pathname } = url;
+    if (request.method === 'GET' && pathname === '/health') {
+      // Which settings are present (never their values), so `npm run preflight` can spot a missed step.
+      const health = {
+        ok: true,
+        configured: {
+          anthropic_key: !!env.ANTHROPIC_API_KEY,
+          revenuecat_key: !!env.REVENUECAT_SECRET_KEY,
+          missing_page_settings: missingSettings(env),
+        },
+      };
+      if (url.searchParams.get('deep') !== '1') return json(health);
+      // ?deep=1 also asks Anthropic and RevenueCat whether they accept the keys. Both checks are free.
+      if (env.BURST_LIMITER && !(await env.BURST_LIMITER.limit({ key: 'health' })).success) {
+        return error(429, 'slow_down', 'Too many checks. Please wait a minute and try again.');
+      }
+      const [anthropic, revenuecat] = await Promise.all([
+        env.ANTHROPIC_API_KEY ? deps.ai(env).checkKey() : 'missing',
+        checkRevenueCatKey(env, fetchImpl),
+      ]);
+      return json({ ...health, keys: { anthropic, revenuecat } });
+    }
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      const page = pageResponse(pathname, request.method, env);
+      if (page) return page;
+    }
 
     const route = ROUTES[pathname];
     if (!route) return error(404, 'not_found', 'Not found.');

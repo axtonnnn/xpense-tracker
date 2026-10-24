@@ -7,7 +7,22 @@ compatibility_flags = ["nodejs_compat"]
 [alias]
 "zod" = "./node_modules/zod"
 
+# The privacy policy, terms and support pages (docs/*.md) are bundled as text and served at
+# /privacy, /terms and /support — use those URLs in App Store Connect.
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = true
+
 [vars]
+# Shown on the /privacy, /terms and /support pages. Fill these in before you publish.
+OWNER_NAME = "REPLACE with your name or company"
+CONTACT_EMAIL = "REPLACE with your support email"
+GOVERNING_LAW = "REPLACE with your country or state, e.g. the State of California, USA"
+LAST_UPDATED = "REPLACE with the date you publish, e.g. 1 November 2026"
+# Optional: once the app is live, its App Store link adds a download button to the home page.
+APP_STORE_URL = ""
+
 FREE_TRIAL_SCANS = "3"
 # Pro fair-use caps per calendar month. At max effort each scan costs ≈ $0.002–0.008,
 # so 300 scans is at most ≈ $2.40 for an extreme user; lower these to tighten worst-case cost.

@@ -45,6 +45,7 @@ function setup(
     scanReceipt: vi.fn(async () => receipt),
     checkPurchase: vi.fn(async () => ({ necessity: 'want' as const, verdict: 'wait' as const, reason: 'Nice to have.', cheaper_alternative: null, questions: [] })),
     monthlyReview: vi.fn(async () => ({ headline: 'Good month', summary: 'Fine.', tips: ['a', 'b', 'c'], safety_score: 70 })),
+    checkKey: vi.fn(async () => 'ok' as const),
     ...opts.ai,
   };
   const fetchImpl = vi.fn(async () => {
@@ -175,6 +176,47 @@ describe('Pro', () => {
     const res = await handle(post('/v1/check', checkBody), env);
     expect(res.status).toBe(503);
     expect(ai.checkPurchase).not.toHaveBeenCalled();
+  });
+
+  it('still allows free trial scans while RevenueCat is down', async () => {
+    const { handle, env, kv } = setup({ rcStatus: 500 });
+    const res = await handle(post('/v1/scan', scanBody), env);
+    expect(res.status).toBe(200);
+    expect((await read(res)).trial_remaining).toBe(2);
+    expect(kv.store.get(`trial:${INSTALL}`)).toBe('1');
+  });
+
+  it('says "try again" rather than "upgrade" when the trial is used up during an outage', async () => {
+    const { handle, env, kv } = setup({ rcStatus: 500 });
+    kv.store.set(`trial:${INSTALL}`, '3');
+    const res = await handle(post('/v1/scan', scanBody), env);
+    expect(res.status).toBe(503);
+    expect((await read(res)).error.code).toBe('store_unavailable');
+  });
+});
+
+describe('health', () => {
+  const health = (deep: boolean) => new Request(`https://xpense.example/health${deep ? '?deep=1' : ''}`);
+
+  it('asks Anthropic and RevenueCat about the keys only on ?deep=1', async () => {
+    const { handle, env, ai, fetchImpl } = setup();
+    expect(await (await handle(health(false), env)).json()).not.toHaveProperty('keys');
+    expect(ai.checkKey).not.toHaveBeenCalled();
+    const deep = (await (await handle(health(true), env)).json()) as { keys: unknown };
+    expect(deep.keys).toEqual({ anthropic: 'ok', revenuecat: 'ok' });
+    expect(fetchImpl).toHaveBeenCalledWith('https://api.revenuecat.com/v1/subscribers/xpense-key-check', expect.anything());
+  });
+
+  it('reports rejected and missing keys', async () => {
+    const rejected = setup({ rcStatus: 401, ai: { checkKey: vi.fn(async () => 'invalid' as const) } });
+    expect(((await (await rejected.handle(health(true), rejected.env)).json()) as { keys: unknown }).keys).toEqual({ anthropic: 'invalid', revenuecat: 'invalid' });
+    const missing = setup({ env: { ANTHROPIC_API_KEY: '', REVENUECAT_SECRET_KEY: undefined } });
+    expect(((await (await missing.handle(health(true), missing.env)).json()) as { keys: unknown }).keys).toEqual({ anthropic: 'missing', revenuecat: 'missing' });
+  });
+
+  it('rate-limits the deep check', async () => {
+    const { handle, env } = setup({ env: { BURST_LIMITER: { limit: async () => ({ success: false }) } } });
+    expect((await handle(health(true), env)).status).toBe(429);
   });
 });
 

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import Purchases, {
   PURCHASES_ERROR_CODE,
   type CustomerInfo,
@@ -18,6 +18,8 @@ type ProState = {
   storeReady: boolean;
   offering: PurchasesOffering | null;
   managementURL: string | null;
+  /** Whether a product's free trial can be shown to this user (see the eligibility check below). */
+  trialEligible: (productId: string) => boolean;
   purchase: (pkg: PurchasesPackage) => Promise<boolean>;
   restore: () => Promise<boolean>;
   manage: () => Promise<void>;
@@ -33,6 +35,7 @@ export function ProProvider({ children }: { children: ReactNode }) {
   const [storeReady, setStoreReady] = useState(false);
   const [offering, setOffering] = useState<PurchasesOffering | null>(null);
   const [managementURL, setManagementURL] = useState<string | null>(null);
+  const [eligibleIds, setEligibleIds] = useState<string[]>([]);
 
   const apply = useCallback((info: CustomerInfo) => {
     setEntitled(hasPro(info));
@@ -51,6 +54,15 @@ export function ProProvider({ children }: { children: ReactNode }) {
         apply(info);
         setOffering(offerings.current);
         setStoreReady(true);
+        // iOS: only advertise a free trial the App Store will actually give (someone who already had one
+        // pays from day one). An unknown answer shows the regular price. Google Play only includes the
+        // trial in a product when the user is eligible, so Android needs no check.
+        const ids = offerings.current?.availablePackages.map((p) => p.product.identifier) ?? [];
+        if (Platform.OS === 'ios' && ids.length > 0) {
+          const result = await Purchases.checkTrialOrIntroductoryPriceEligibility(ids).catch(() => ({}) as Record<string, undefined>);
+          const ELIGIBLE = Purchases.INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
+          if (!cancelled) setEligibleIds(ids.filter((id) => result[id]?.status === ELIGIBLE));
+        }
       } catch (e) {
         console.warn('[pro] RevenueCat unavailable', e);
       }
@@ -86,11 +98,13 @@ export function ProProvider({ children }: { children: ReactNode }) {
     else if (storeReady) await Purchases.showManageSubscriptions();
   }, [managementURL, storeReady]);
 
+  const trialEligible = useCallback((productId: string) => Platform.OS !== 'ios' || eligibleIds.includes(productId), [eligibleIds]);
+
   const isPro = entitled || (__DEV__ && !!settings?.devPro);
 
   const value = useMemo(
-    () => ({ isPro, storeReady, offering, managementURL, purchase, restore, manage }),
-    [isPro, storeReady, offering, managementURL, purchase, restore, manage],
+    () => ({ isPro, storeReady, offering, managementURL, trialEligible, purchase, restore, manage }),
+    [isPro, storeReady, offering, managementURL, trialEligible, purchase, restore, manage],
   );
   return <ProContext.Provider value={value}>{children}</ProContext.Provider>;
 }

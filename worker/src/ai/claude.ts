@@ -33,10 +33,15 @@ export class AIError extends Error {
   }
 }
 
+/** Whether a provider accepted our API key. */
+export type KeyStatus = 'ok' | 'invalid' | 'unreachable';
+
 export interface AIProvider {
   scanReceipt(req: ScanRequest): Promise<ReceiptResult>;
   checkPurchase(req: CheckRequest): Promise<CheckResult>;
   monthlyReview(req: ReviewRequest): Promise<ReviewResult>;
+  /** Confirms the API key works without using any tokens (for /health?deep=1). */
+  checkKey(): Promise<KeyStatus>;
 }
 
 const NEEDS_VS_WANTS = `Needs are essentials for safety, health and earning a living: housing, utilities, basic groceries and household supplies, medicine and health care, insurance, debt payments, childcare, education, and transport to work or school.
@@ -144,5 +149,13 @@ export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
       ),
     monthlyReview: (req) =>
       ask(ReviewSchema, REVIEW_SYSTEM, [{ type: 'text', text: JSON.stringify(req) }], 16_000),
+    checkKey: async () => {
+      try {
+        await anthropic.models.list({ limit: 1 });
+        return 'ok';
+      } catch (e) {
+        return e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError ? 'invalid' : 'unreachable';
+      }
+    },
   };
 }

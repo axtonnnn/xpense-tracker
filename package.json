@@ -59,13 +59,16 @@
   "scripts": {
     "start": "expo start",
     "demo": "node scripts/demo.mjs",
+    "preflight": "node scripts/preflight.mjs",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "brand": "node scripts/brand/render.mjs"
+    "brand": "node scripts/brand/render.mjs",
+    "store:screenshots": "node scripts/store/screenshots.mjs",
+    "store:check": "node scripts/store/check-listing.mjs"
   },
   "private": true,
   "jest": {

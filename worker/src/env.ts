@@ -24,4 +24,11 @@ export interface Env {
   PRO_MONTHLY_REVIEWS?: string;
   /** Local development only: treat every install as Pro. Never set this in production. */
   ALLOW_ALL_PRO?: string;
+  /** Shown on the privacy policy, terms and support pages (src/pages.ts). */
+  OWNER_NAME?: string;
+  CONTACT_EMAIL?: string;
+  GOVERNING_LAW?: string;
+  LAST_UPDATED?: string;
+  /** Optional: the App Store link, shown as a button on the home page once the app is live. */
+  APP_STORE_URL?: string;
 }
