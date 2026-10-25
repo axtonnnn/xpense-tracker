@@ -12,9 +12,9 @@ import {
   type ReviewResult,
   type ScanRequest,
 } from '../../shared/schemas';
+import { getAccessToken } from './auth';
 import { API_URL, DEMO_AI } from './config';
 import { demoCheck, demoReceipt, demoReview } from './demo';
-import { getInstallId } from './install-id';
 
 export class ApiError extends Error {
   constructor(
@@ -33,18 +33,21 @@ export class NeedsProError extends ApiError {}
 // connection alive while it works; this is the most we wait for the whole answer.
 const TIMEOUT_MS = 180_000;
 
-async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
+async function post(path: string, body: unknown, timeoutMs = TIMEOUT_MS): Promise<Record<string, unknown>> {
   if (!API_URL) {
     throw new ApiError('not_configured', 'The AI service is not set up yet. Add your Worker URL to app.json → extra.apiUrl.');
   }
+  // The server knows who's asking from the account's sign-in token (and checks Pro for that account).
+  const token = await getAccessToken();
+  if (!token) throw new ApiError('signed_out', 'Please sign in again to use the AI.');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   let text: string;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Install-Id': await getInstallId() },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -101,4 +104,12 @@ export async function checkPurchase(req: CheckRequest): Promise<CheckResult> {
 export async function monthlyReview(req: ReviewRequest): Promise<ReviewResult> {
   if (DEMO_AI) return demoReview();
   return validate(ReviewSchema, (await post('/v1/review', req)).result);
+}
+
+/**
+ * Deletes the account on the server: the synced data, the sign-in, usage counters and the RevenueCat
+ * customer. An App Store subscription itself has to be cancelled in the person's Apple account.
+ */
+export async function deleteAccountOnServer(): Promise<void> {
+  await post('/v1/account/delete', {}, 30_000);
 }

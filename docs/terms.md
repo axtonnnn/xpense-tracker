@@ -21,16 +21,18 @@ AI features (receipt and bill scanning, "Should I buy this?", monthly review) pr
 - If a free trial is offered, you will be charged when it ends unless you cancel at least 24 hours before it ends.
 - Payment is charged to your App Store or Google Play account when you confirm the purchase. The subscription renews automatically unless you cancel at least 24 hours before the end of the current period.
 - Manage or cancel any time in your App Store or Google Play account settings. Refunds are handled by Apple or Google under their policies.
-- Free accounts include {{FREE_TRIAL_SCANS}} trial AI scans per install.
+- Free accounts include {{FREE_TRIAL_SCANS}} trial AI scans.
 - Pro includes fair-use limits to keep the service sustainable: {{PRO_MONTHLY_SCANS}} receipt scans, {{PRO_MONTHLY_CHECKS}} purchase checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month. Limits reset on the 1st.
 
 ## 4. Acceptable use
 
 Don't misuse the service. For example, don't try to get around usage limits or subscription checks, overload or reverse-engineer the AI service, or upload content you have no right to use.
 
-## 5. Your data
+## 5. Your account and your data
 
-Your budgeting data is stored on your device, and you are responsible for it. Use **Export as CSV** if you want a backup. Uninstalling the app or using **Delete all data** removes it permanently.
+You need an account to use Xpense: sign in with Apple or with a code sent to your email. Keep access to that Apple ID or email address, because it is how you get back into your account. One account is for one person.
+
+Your entries sync between the devices you sign in on. Receipt photos stay on the device that took them. Use **Export as CSV** (Pro) if you want your own copy. **Settings → Delete account** deletes your account and its data permanently; it can't be undone.
 
 ## 6. Availability and changes
 

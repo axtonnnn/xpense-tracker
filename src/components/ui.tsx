@@ -1,8 +1,8 @@
-// Design-system primitives shared by every screen.
+// Design-system primitives shared by every screen: paper, white pages with sketched frames, ink buttons,
+// underlined fields and serif headings. See docs/brand/README.md for the rules behind them.
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useState, type ComponentProps, type ReactNode } from 'react';
+import { useId, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -13,36 +13,40 @@ import {
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
   type PressableProps,
   type StyleProp,
   type TextInputProps,
   type TextProps,
+  type ViewProps,
   type ViewStyle,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { LogoMark } from './brand';
-import { elevation, fonts, radius, space, type as typeScale, useColors, useIsDark, type Weight } from '@/theme/tokens';
+import { PageFill, Scribble, seedOf, SketchFrame, SketchRule } from './sketch';
+import { colors, fonts, READABLE_MAX, space, type as typeScale } from '@/theme/tokens';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
 type TextVariant = keyof typeof typeScale;
+type Weight = 'regular' | 'medium' | 'semibold';
 
 export function AppText({
   variant = 'body',
   weight,
   color,
   muted,
+  faint,
   center,
   style,
   ...rest
-}: TextProps & { variant?: TextVariant; weight?: Weight; color?: string; muted?: boolean; center?: boolean }) {
-  const c = useColors();
+}: TextProps & { variant?: TextVariant; weight?: Weight; color?: string; muted?: boolean; faint?: boolean; center?: boolean }) {
   return (
     <Text
       style={[
         typeScale[variant],
         weight && { fontFamily: fonts[weight] },
-        { color: color ?? (muted ? c.inkMuted : c.ink) },
+        { color: color ?? (faint ? colors.pencil : muted ? colors.graphite : colors.ink) },
         center && { textAlign: 'center' },
         style,
       ]}
@@ -50,6 +54,9 @@ export function AppText({
     />
   );
 }
+
+/** Money and counts line up in columns. */
+export const tabular = { fontVariant: ['tabular-nums' as const] };
 
 type HapticKind = 'light' | 'select' | 'success' | 'warning';
 
@@ -76,27 +83,43 @@ export function PressableScale({
         if (haptics) haptic(haptics);
         onPress?.(e);
       }}
-      style={({ pressed }) => [style, pressed && { transform: [{ scale: 0.975 }], opacity: 0.94 }]}>
+      style={({ pressed }) => [style, pressed && { transform: [{ scale: 0.98 }], opacity: 0.85 }]}>
       {children}
     </Pressable>
   );
 }
 
+/** A stable seed for this component instance, so its sketched frame keeps the same wobble. */
+export function useSeed(seed?: number | string): number {
+  const id = useId();
+  return typeof seed === 'number' ? seed : seedOf(seed ?? id);
+}
+
+/**
+ * The paper every screen is drawn on. Content is centred and stops at a readable width on iPad and Mac;
+ * pass `full` for screens that lay out their own columns.
+ */
 export function Screen({
   children,
   scroll = true,
+  full,
+  topInset,
   contentStyle,
 }: {
   children: ReactNode;
   scroll?: boolean;
+  full?: boolean;
+  /** Pad for the status bar (screens without a navigation header). */
+  topInset?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 }) {
-  const c = useColors();
-  if (!scroll) return <View style={[styles.screen, { flex: 1, backgroundColor: c.bg }, contentStyle]}>{children}</View>;
+  const insets = useSafeAreaInsets();
+  const inner = [styles.screen, !full && styles.readable, topInset && { paddingTop: insets.top + space.md }, contentStyle];
+  if (!scroll) return <View style={[{ flex: 1, backgroundColor: colors.paper }, inner]}>{children}</View>;
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={[styles.screen, contentStyle]}
+      style={{ flex: 1, backgroundColor: colors.paper }}
+      contentContainerStyle={inner}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       automaticallyAdjustKeyboardInsets
@@ -107,59 +130,72 @@ export function Screen({
   );
 }
 
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  const c = useColors();
-  const dark = useIsDark();
+/** A white page with a sketched frame. */
+export function Card({ children, style, seed }: { children: ReactNode; style?: StyleProp<ViewStyle>; seed?: number | string }) {
+  const s = useSeed(seed);
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: c.surface },
-        dark ? { borderWidth: StyleSheet.hairlineWidth, borderColor: c.border } : elevation(false),
-        style,
-      ]}>
+    <View style={[styles.card, style]}>
+      <PageFill />
+      <SketchFrame seed={s} />
       {children}
     </View>
   );
 }
 
-/** Evergreen gradient card (the app icon's colours) for the one most important thing on a screen. */
-export function HeroCard({ children, style, watermark = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; watermark?: boolean }) {
-  const c = useColors();
+/** A screen's heading: an optional pencil note above a serif title, with something on the right. */
+export function PageTitle({ title, note, right }: { title: string; note?: string; right?: ReactNode }) {
   return (
-    <LinearGradient
-      colors={[c.heroTop, c.heroBottom]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0.35, y: 1 }}
-      style={[styles.hero, elevation(useIsDark(), 2), style]}>
-      {watermark && (
-        <View pointerEvents="none" style={styles.watermark}>
-          <LogoMark size={190} variant="dark" opacity={0.13} />
-        </View>
-      )}
-      {children}
-    </LinearGradient>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md }}>
+      <View style={{ flexShrink: 1 }}>
+        {note && <AppText variant="note" muted>{note}</AppText>}
+        <AppText variant="display" accessibilityRole="header">
+          {title}
+        </AppText>
+      </View>
+      {right}
+    </View>
   );
 }
 
-export function SectionTitle({ children, action }: { children: ReactNode; action?: { label: string; onPress: () => void } }) {
-  const c = useColors();
+export function SectionTitle({
+  children,
+  action,
+  note,
+}: {
+  children: ReactNode;
+  action?: { label: string; onPress: () => void };
+  note?: string;
+}) {
   return (
     <View style={styles.sectionTitle}>
-      <AppText variant="title">{children}</AppText>
-      {action && (
-        <Pressable onPress={action.onPress} hitSlop={10} accessibilityRole="button">
-          <AppText variant="caption" weight="bold" color={c.primary}>
-            {action.label}
-          </AppText>
-        </Pressable>
-      )}
+      <AppText variant="title" accessibilityRole="header">
+        {children}
+      </AppText>
+      {action ? (
+        <TextLink label={action.label} onPress={action.onPress} />
+      ) : note ? (
+        <AppText variant="note" muted style={{ fontSize: 19 }}>
+          {note}
+        </AppText>
+      ) : null}
     </View>
   );
 }
 
-type ButtonKind = 'primary' | 'secondary' | 'ghost' | 'danger' | 'hero' | 'heroGhost';
+/** Small uppercase label above a group, e.g. "SAFE TO SPEND". */
+export function Label({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={style}>
+      <AppText variant="label" muted>
+        {children}
+      </AppText>
+    </View>
+  );
+}
 
+type ButtonKind = 'primary' | 'secondary' | 'ghost' | 'danger';
+
+/** primary: an ink plate. secondary: a sketched outline. ghost: plain text. danger: red text in an outline. */
 export function Button({
   title,
   onPress,
@@ -179,23 +215,8 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }) {
-  const c = useColors();
-  const bg = {
-    primary: c.primary,
-    secondary: c.primarySoft,
-    ghost: 'transparent',
-    danger: c.dangerSoft,
-    hero: c.gold,
-    heroGhost: 'rgba(246,244,238,0.14)',
-  }[kind];
-  const fg = {
-    primary: c.onPrimary,
-    secondary: c.primary,
-    ghost: c.primary,
-    danger: c.danger,
-    hero: c.heroBottom,
-    heroGhost: c.onHero,
-  }[kind];
+  const seed = useSeed(title);
+  const fg = kind === 'primary' ? colors.onInk : kind === 'danger' ? colors.alert : colors.ink;
   const inactive = disabled || loading;
   return (
     <PressableScale
@@ -205,13 +226,14 @@ export function Button({
       onPress={onPress}
       disabled={inactive}
       haptics="light"
-      style={[styles.button, { backgroundColor: bg, opacity: inactive ? 0.55 : 1 }, style]}>
+      style={[styles.button, kind === 'primary' && { backgroundColor: colors.ink }, { opacity: inactive ? 0.5 : 1 }, style]}>
+      {(kind === 'secondary' || kind === 'danger') && <SketchFrame seed={seed} opacity={kind === 'danger' ? 0.7 : 1} />}
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
         <>
           {icon && <Ionicons name={icon} size={19} color={fg} />}
-          <AppText weight="bold" color={fg}>
+          <AppText weight="medium" color={fg}>
             {title}
           </AppText>
         </>
@@ -220,9 +242,18 @@ export function Button({
   );
 }
 
+/** An underlined text link. */
+export function TextLink({ label, onPress, muted }: { label: string; onPress: () => void; muted?: boolean }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="link" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}>
+      <AppText variant="caption" muted={muted} style={{ textDecorationLine: 'underline', fontSize: 14 }}>
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+
 export function IconButton({ icon, onPress, label, size = 40 }: { icon: IconName; onPress: () => void; label: string; size?: number }) {
-  const c = useColors();
-  const dark = useIsDark();
   return (
     <PressableScale
       onPress={onPress}
@@ -230,76 +261,73 @@ export function IconButton({ icon, onPress, label, size = 40 }: { icon: IconName
       accessibilityLabel={label}
       hitSlop={6}
       haptics="light"
-      style={[
-        { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
-        dark ? { borderWidth: StyleSheet.hairlineWidth, borderColor: c.border } : elevation(false),
-      ]}>
-      <Ionicons name={icon} size={size * 0.5} color={c.ink} />
+      style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Ionicons name={icon} size={size * 0.55} color={colors.ink} />
     </PressableScale>
   );
 }
 
-export function IconCircle({ icon, size = 40, bg, color }: { icon: IconName; size?: number; bg?: string; color?: string }) {
-  const c = useColors();
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: bg ?? c.primarySoft }}>
-      <Ionicons name={icon} size={size * 0.5} color={color ?? c.primary} />
-    </View>
-  );
-}
-
+/** A choice chip: sketched outline, or an ink plate when picked. */
 export function Chip({
   label,
   selected,
   onPress,
-  icon,
-  color,
+  mark,
   locked,
 }: {
   label: string;
   selected?: boolean;
   onPress?: () => void;
-  icon?: IconName;
-  color?: string;
+  /** A need/want mark drawn before the label. */
+  mark?: ReactNode;
   locked?: boolean;
 }) {
-  const c = useColors();
-  const accent = color ?? c.primary;
-  const fg = selected ? c.onPrimary : c.ink;
+  const seed = useSeed(label);
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected }}
+      accessibilityLabel={locked ? `${label}, Pro` : label}
       onPress={onPress}
       haptics="select"
-      style={[
-        styles.chip,
-        { backgroundColor: selected ? accent : c.surface, borderColor: selected ? accent : c.border },
-      ]}>
-      {icon && <Ionicons name={icon} size={15} color={selected ? c.onPrimary : c.inkMuted} />}
-      <AppText variant="caption" weight="semibold" color={fg}>
+      style={[styles.chip, selected && { backgroundColor: colors.ink }]}>
+      {!selected && <SketchFrame seed={seed} twice={false} />}
+      {mark}
+      <AppText variant="caption" weight="medium" color={selected ? colors.onInk : colors.ink} style={{ fontSize: 14 }}>
         {label}
       </AppText>
-      {locked && <Ionicons name="lock-closed" size={12} color={selected ? c.onPrimary : c.pro} />}
+      {locked && <ProTag light={selected} />}
     </PressableScale>
   );
 }
 
-export function Segmented<T extends string>({
+/** "pro", pencilled next to things that need Xpense Pro. */
+export function ProTag({ light }: { light?: boolean }) {
+  return (
+    <AppText variant="note" color={light ? colors.onInk : colors.graphite} style={{ fontSize: 17, lineHeight: 18 }}>
+      pro
+    </AppText>
+  );
+}
+
+/** Text tabs with a scribbled underline under the chosen one (periods, expense/income). */
+export function TextTabs<T extends string>({
   options,
   value,
   onChange,
   locked = [],
+  size = 'sm',
 }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
   locked?: T[];
+  size?: 'sm' | 'lg';
 }) {
-  const c = useColors();
-  const dark = useIsDark();
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const big = size === 'lg';
   return (
-    <View style={[styles.segmented, { backgroundColor: c.surfaceAlt }]} accessibilityRole="tablist">
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: big ? 26 : 22, rowGap: space.md }} accessibilityRole="tablist">
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -307,15 +335,29 @@ export function Segmented<T extends string>({
             key={o.value}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
+            accessibilityLabel={locked.includes(o.value) ? `${o.label}, Pro` : o.label}
+            hitSlop={8}
             onPress={() => {
               if (!active) haptic('select');
               onChange(o.value);
             }}
-            style={[styles.segment, active && [{ backgroundColor: c.surface }, dark ? null : elevation(false)]]}>
-            <AppText variant="caption" weight={active ? 'bold' : 'semibold'} color={active ? c.ink : c.inkMuted}>
-              {o.label}
-            </AppText>
-            {locked.includes(o.value) && <Ionicons name="lock-closed" size={11} color={c.pro} />}
+            style={{ paddingBottom: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 2 }}>
+              <Text
+                onLayout={(e: LayoutChangeEvent) => {
+                  const w = Math.round(e.nativeEvent.layout.width);
+                  if (widths[o.value] !== w) setWidths((cur) => ({ ...cur, [o.value]: w }));
+                }}
+                style={
+                  big
+                    ? { fontFamily: fonts.serif, fontSize: 34, lineHeight: 38, color: active ? colors.ink : colors.pencil }
+                    : { fontFamily: active ? fonts.semibold : fonts.regular, fontSize: 15, lineHeight: 20, color: active ? colors.ink : colors.graphite }
+                }>
+                {o.label}
+              </Text>
+              {locked.includes(o.value) && <ProTag />}
+            </View>
+            {active && widths[o.value] ? <Scribble width={widths[o.value]} style={{ position: 'absolute', bottom: big ? -4 : 0 }} /> : null}
           </Pressable>
         );
       })}
@@ -323,7 +365,7 @@ export function Segmented<T extends string>({
   );
 }
 
-/** Brand-coloured switch. react-native-web colours the "on" thumb with its own prop. */
+/** Ink switch. react-native-web colours the "on" thumb with its own prop. */
 export function Toggle({
   value,
   onValueChange,
@@ -335,45 +377,44 @@ export function Toggle({
   label: string;
   disabled?: boolean;
 }) {
-  const c = useColors();
   const web = Platform.OS === 'web' ? ({ activeThumbColor: '#FFFFFF' } as object) : null;
   return (
     <Switch
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
-      trackColor={{ true: c.primary, false: c.border }}
+      trackColor={{ true: colors.ink, false: colors.sand }}
       thumbColor="#FFFFFF"
-      ios_backgroundColor={c.border}
+      ios_backgroundColor={colors.sand}
       accessibilityLabel={label}
       {...web}
     />
   );
 }
 
+/** A field is a label and an ink underline, like writing on a line. */
 export function Field({
   label,
   hint,
-  icon,
+  right,
+  big,
   style,
   onFocus,
   onBlur,
   ...rest
-}: TextInputProps & { label?: string; hint?: string; icon?: IconName }) {
-  const c = useColors();
+}: TextInputProps & { label?: string; hint?: string; right?: ReactNode; big?: boolean }) {
   const [focused, setFocused] = useState(false);
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 4 }}>
       {label && (
-        <AppText variant="caption" weight="semibold" muted>
+        <AppText variant="caption" muted>
           {label}
         </AppText>
       )}
-      <View style={[styles.inputWrap, { backgroundColor: c.surface, borderColor: focused ? c.primary : c.border }]}>
-        {icon && <Ionicons name={icon} size={18} color={c.inkMuted} />}
+      <View style={[styles.inputWrap, { borderBottomColor: colors.ink, borderBottomWidth: focused ? 2 : 1.4 }]}>
         <TextInput
-          placeholderTextColor={c.inkMuted}
-          style={[styles.input, { color: c.ink }, style]}
+          placeholderTextColor={colors.pencil}
+          style={[styles.input, big && { fontFamily: fonts.serif, fontSize: 30 }, { color: colors.ink }, style]}
           onFocus={(e) => {
             setFocused(true);
             onFocus?.(e);
@@ -384,9 +425,10 @@ export function Field({
           }}
           {...rest}
         />
+        {right}
       </View>
       {hint && (
-        <AppText variant="caption" muted>
+        <AppText variant="caption" faint>
           {hint}
         </AppText>
       )}
@@ -394,41 +436,32 @@ export function Field({
   );
 }
 
-export function Banner({ tone = 'info', icon, children }: { tone?: 'info' | 'warn' | 'danger' | 'success'; icon?: IconName; children: ReactNode }) {
-  const c = useColors();
-  const map = {
-    info: { bg: c.primarySoft, fg: c.primary, icon: 'information-circle' as IconName },
-    success: { bg: c.needSoft, fg: c.needInk, icon: 'checkmark-circle' as IconName },
-    warn: { bg: c.wantSoft, fg: c.wantInk, icon: 'alert-circle' as IconName },
-    danger: { bg: c.dangerSoft, fg: c.danger, icon: 'alert-circle' as IconName },
-  }[tone];
+/** A short message in a sketched box. Danger text is the only red in the app. */
+export function Banner({ tone = 'info', children }: { tone?: 'info' | 'warn' | 'danger' | 'success'; children: ReactNode }) {
+  const seed = useSeed();
+  const danger = tone === 'danger';
   return (
-    <View style={[styles.banner, { backgroundColor: map.bg }]}>
-      <Ionicons name={icon ?? map.icon} size={20} color={map.fg} />
-      <AppText variant="caption" weight="semibold" style={{ flex: 1 }}>
+    <View style={styles.banner} accessibilityRole={danger ? 'alert' : undefined}>
+      <PageFill color={danger ? colors.alertSoft : colors.page} />
+      <SketchFrame seed={seed} twice={false} opacity={danger ? 0.6 : 0.8} />
+      <Ionicons
+        name={danger ? 'alert-circle-outline' : tone === 'success' ? 'checkmark-circle-outline' : 'information-circle-outline'}
+        size={19}
+        color={danger ? colors.alert : colors.ink}
+      />
+      <AppText variant="caption" color={danger ? colors.alert : colors.ink} style={{ flex: 1, fontSize: 14, lineHeight: 20 }}>
         {children}
       </AppText>
     </View>
   );
 }
 
-export function ProBadge({ label = 'PRO', onHero }: { label?: string; onHero?: boolean }) {
-  const c = useColors();
+/** A small outlined tag, e.g. "Scanned" or "Need". */
+export function Pill({ label, mark }: { label: string; mark?: ReactNode }) {
   return (
-    <View style={[styles.proBadge, { backgroundColor: onHero ? c.gold : c.wantSoft }]}>
-      <Ionicons name="sparkles" size={11} color={onHero ? c.heroBottom : c.pro} />
-      <AppText variant="caption" weight="extrabold" color={onHero ? c.heroBottom : c.pro} style={{ fontSize: 11, lineHeight: 14 }}>
-        {label}
-      </AppText>
-    </View>
-  );
-}
-
-export function Pill({ icon, label, color, bg }: { icon?: IconName; label: string; color: string; bg: string }) {
-  return (
-    <View style={[styles.pill, { backgroundColor: bg }]}>
-      {icon && <Ionicons name={icon} size={14} color={color} />}
-      <AppText variant="caption" weight="bold" color={color}>
+    <View style={styles.pill}>
+      {mark}
+      <AppText variant="caption" weight="medium" style={{ fontSize: 13 }}>
         {label}
       </AppText>
     </View>
@@ -460,99 +493,76 @@ export function EmptyState({
   );
 }
 
-export function Row({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[{ flexDirection: 'row', alignItems: 'center', gap: space.sm }, style]}>{children}</View>;
+export function Row({ children, style, ...rest }: ViewProps) {
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: space.sm }, style]} {...rest}>
+      {children}
+    </View>
+  );
 }
 
-export function Divider() {
-  const c = useColors();
-  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.border }} />;
+export function Divider({ seed }: { seed?: number }) {
+  return <SketchRule seed={seed ?? 7} opacity={0.2} />;
 }
 
-/** A settings-style row: icon, title, optional subtitle, and a trailing accessory or chevron. */
+/** A settings-style row: optional ink icon, title, subtitle, and a trailing accessory or chevron. */
 export function ListRow({
   icon,
-  tint,
   title,
   subtitle,
   right,
   onPress,
   destructive,
 }: {
-  icon: IconName;
-  tint?: { bg: string; fg: string };
+  icon?: IconName;
   title: string;
   subtitle?: string;
   right?: ReactNode;
   onPress?: () => void;
   destructive?: boolean;
 }) {
-  const c = useColors();
+  const fg = destructive ? colors.alert : colors.ink;
   const content = (
     <View style={styles.listRow}>
-      <IconCircle icon={icon} size={36} bg={tint?.bg ?? (destructive ? c.dangerSoft : c.primarySoft)} color={tint?.fg ?? (destructive ? c.danger : c.primary)} />
+      {icon && <Ionicons name={icon} size={21} color={fg} />}
       <View style={{ flex: 1, gap: 1 }}>
-        <AppText weight="semibold" color={destructive ? c.danger : c.ink}>
-          {title}
-        </AppText>
+        <AppText color={fg}>{title}</AppText>
         {subtitle && (
-          <AppText variant="caption" muted>
+          <AppText variant="caption" faint>
             {subtitle}
           </AppText>
         )}
       </View>
-      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={c.inkMuted} /> : null)}
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={colors.pencil} /> : null)}
     </View>
   );
   if (!onPress) return content;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}>
       {content}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: space.lg, gap: space.lg, paddingBottom: 120, flexGrow: 1 },
-  card: { borderRadius: radius.lg, padding: space.lg + 2, gap: space.md },
-  hero: { borderRadius: radius.lg, padding: space.xl, gap: space.md, overflow: 'hidden' },
-  watermark: { position: 'absolute', right: -40, bottom: -46, transform: [{ rotate: '8deg' }] },
-  sectionTitle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs },
+  screen: { paddingHorizontal: 24, paddingTop: space.lg, gap: 20, paddingBottom: 120, flexGrow: 1 },
+  readable: { width: '100%', maxWidth: READABLE_MAX + 48, alignSelf: 'center' },
+  card: { padding: 20, gap: space.md },
+  sectionTitle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: space.xs },
   button: {
     minHeight: 52,
-    borderRadius: radius.md,
-    paddingHorizontal: space.lg,
+    borderRadius: 2,
+    paddingHorizontal: space.xl,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space.sm,
+    gap: 10,
   },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    minHeight: 38,
-  },
-  segmented: { flexDirection: 'row', borderRadius: radius.pill, padding: 4 },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: radius.pill,
-    minHeight: 38,
-  },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14 },
-  input: { flex: 1, minWidth: 0, minHeight: 50, fontSize: 16, fontFamily: fonts.medium, outlineStyle: 'solid', outlineWidth: 0 },
-  banner: { flexDirection: 'row', gap: space.sm, alignItems: 'center', borderRadius: 14, padding: space.md },
-  proBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 3 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, minHeight: 38, borderRadius: 2 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  input: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 17, fontFamily: fonts.regular, paddingVertical: 6, paddingHorizontal: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  banner: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 14 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 999, borderWidth: 1.2, borderColor: colors.ink, paddingHorizontal: 12, paddingVertical: 5, alignSelf: 'flex-start' },
   empty: { alignItems: 'center', gap: space.md, paddingVertical: space.lg, paddingHorizontal: space.lg },
-  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm + 2 },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13 },
 });

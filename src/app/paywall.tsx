@@ -1,5 +1,4 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -7,12 +6,13 @@ import { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/brand';
-import { AppText, Banner, Button, Card, IconCircle, Row, type IconName } from '@/components/ui';
+import { NeedMark, PageFill, SketchFrame, Stamp } from '@/components/sketch';
+import { AppText, Banner, Button, Row, TextLink } from '@/components/ui';
 import { PRIVACY_URL, PRO_MONTHLY_SCANS, TERMS_URL } from '@/lib/config';
 import { notify } from '@/lib/confirm';
 import { PREVIEW_PLANS } from '@/lib/preview-plans';
 import { usePro } from '@/lib/pro';
-import { radius, space, useColors } from '@/theme/tokens';
+import { colors, space } from '@/theme/tokens';
 
 const FEATURE_TITLE: Record<string, string> = {
   ai_scan: 'You’ve used your free scans',
@@ -61,7 +61,6 @@ function yearlySaving(packages: PurchasesPackage[]): number | null {
 }
 
 export default function Paywall() {
-  const c = useColors();
   const insets = useSafeAreaInsets();
   const { feature } = useLocalSearchParams<{ feature?: string }>();
   const pro = usePro();
@@ -78,8 +77,11 @@ export default function Paywall() {
   const selected = picked ?? packages.find((p) => p.packageType === PACKAGE_TYPE.ANNUAL) ?? packages[0] ?? null;
   const saving = yearlySaving(packages);
 
+  // Opened from a link there may be nothing behind the paywall to go back to.
+  const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
+
   useEffect(() => {
-    if (pro.isPro) router.back();
+    if (pro.isPro) close();
   }, [pro.isPro]);
 
   const buy = async () => {
@@ -111,160 +113,124 @@ export default function Paywall() {
   };
 
   const trial = selected ? trialFor(selected) : null;
-  const BENEFITS: { icon: IconName; text: string; tint: [string, string] }[] = [
-    { icon: 'scan', text: `Up to ${PRO_MONTHLY_SCANS} AI receipt & bill scans a month`, tint: [c.primarySoft, c.primary] },
-    { icon: 'bag-handle', text: '“Should I buy this?” before you spend', tint: [c.wantSoft, c.wantInk] },
-    { icon: 'sparkles', text: 'Monthly AI review with a safety score', tint: [c.primarySoft, c.primary] },
-    { icon: 'stats-chart', text: '6-month & yearly trends, spending by category', tint: [c.incomeSoft, c.income] },
-    { icon: 'repeat', text: 'Unlimited repeating bills & income', tint: [c.needSoft, c.needInk] },
-    { icon: 'download', text: 'CSV export & your own categories', tint: [c.surfaceAlt, c.inkMuted] },
+  const BENEFITS = [
+    `Up to ${PRO_MONTHLY_SCANS} AI receipt and bill scans a month`,
+    '“Should I buy this?”, checked against your own budget',
+    'A short monthly review with three tips',
+    'Six-month and yearly trends, spending by category',
+    'Unlimited repeating bills and paychecks',
+    'CSV export and your own categories',
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }} showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={[c.heroTop, c.heroBottom]} style={[styles.header, { paddingTop: insets.top + space.lg }]}>
-          <Pressable onPress={() => router.back()} accessibilityLabel="Close" hitSlop={12} style={[styles.close, { top: insets.top + space.md }]}>
-            <Ionicons name="close" size={22} color={c.onHero} />
-          </Pressable>
+    <View style={{ flex: 1, backgroundColor: colors.paper }}>
+      <ScrollView
+        contentContainerStyle={{ paddingTop: insets.top + space.lg, paddingBottom: insets.bottom + space.xl, paddingHorizontal: 24, width: '100%', maxWidth: 560, alignSelf: 'center', gap: 20 }}
+        showsVerticalScrollIndicator={false}>
+        <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12} style={styles.close}>
+          <Ionicons name="close" size={24} color={colors.ink} />
+        </Pressable>
+        <View style={{ alignItems: 'center', gap: space.sm }}>
           <AppIcon size={84} />
-          <AppText variant="display" color={c.onHero} center>
+          <AppText variant="display" center>
             Xpense Pro
           </AppText>
-          <AppText color={c.onHeroMuted} center>
-            {(feature && FEATURE_TITLE[feature]) || 'Spend on what matters. Let AI do the busywork.'}
+          <AppText muted center>
+            {(feature && FEATURE_TITLE[feature]) || 'Spend on what matters. Let the AI do the busywork.'}
           </AppText>
-        </LinearGradient>
+        </View>
 
-        <View style={{ padding: space.lg, gap: space.lg, marginTop: -space.xl }}>
-          <Card style={{ gap: space.md }}>
-            {BENEFITS.map((b) => (
-              <Row key={b.text} style={{ gap: space.md }}>
-                <IconCircle icon={b.icon} size={34} bg={b.tint[0]} color={b.tint[1]} />
-                <AppText weight="semibold" style={{ flex: 1 }}>
-                  {b.text}
-                </AppText>
-              </Row>
-            ))}
-          </Card>
+        <View style={{ gap: 12 }}>
+          {BENEFITS.map((b) => (
+            <Row key={b} style={{ gap: 12, alignItems: 'flex-start' }}>
+              <View style={{ marginTop: 6 }}>
+                <NeedMark size={9} />
+              </View>
+              <AppText style={{ flex: 1, fontSize: 15, lineHeight: 22 }}>{b}</AppText>
+            </Row>
+          ))}
+        </View>
 
-          {packages.length > 0 ? (
-            <View style={{ gap: space.sm }}>
-              {packages.map((p) => {
-                const active = selected?.identifier === p.identifier;
-                const t = trialFor(p);
-                const annual = p.packageType === PACKAGE_TYPE.ANNUAL;
-                return (
-                  <Pressable
-                    key={p.identifier}
-                    onPress={() => setSelected(p)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    style={[
-                      styles.plan,
-                      { borderColor: active ? c.primary : c.border, backgroundColor: active ? c.primarySoft : c.surface, borderWidth: active ? 2 : 1 },
-                    ]}>
-                    <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={22} color={active ? c.primary : c.inkMuted} />
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Row style={{ gap: 6 }}>
-                        <AppText weight="bold">{periodLabel(p)}</AppText>
-                        {annual && saving !== null && (
-                          <View style={[styles.saveBadge, { backgroundColor: c.gold }]}>
-                            <AppText variant="caption" weight="extrabold" color={c.heroBottom} style={{ fontSize: 11, lineHeight: 14 }}>
-                              BEST VALUE · SAVE {saving}%
-                            </AppText>
-                          </View>
-                        )}
-                      </Row>
-                      {t && (
-                        <AppText variant="caption" muted>
-                          {t}
-                        </AppText>
-                      )}
-                      {annual && p.product.pricePerMonthString && (
-                        <AppText variant="caption" muted>
-                          Just {p.product.pricePerMonthString} a month
-                        </AppText>
-                      )}
-                    </View>
-                    <AppText weight="extrabold">
+        {packages.length > 0 ? (
+          <View style={{ gap: 12 }}>
+            {packages.map((p) => {
+              const active = selected?.identifier === p.identifier;
+              const t = trialFor(p);
+              const annual = p.packageType === PACKAGE_TYPE.ANNUAL;
+              return (
+                <Pressable
+                  key={p.identifier}
+                  onPress={() => setSelected(p)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  style={styles.plan}>
+                  <PageFill />
+                  <SketchFrame seed={annual ? 401 : 403} weight={active ? 2.2 : 1.2} opacity={active ? 1 : 0.5} twice={active} />
+                  <View style={[styles.radio, active && { backgroundColor: colors.ink }]} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <AppText weight="semibold">{periodLabel(p)}</AppText>
+                    {t && (
+                      <AppText variant="caption" muted>
+                        {t}
+                      </AppText>
+                    )}
+                    {annual && p.product.pricePerMonthString && (
+                      <AppText variant="caption" muted>
+                        Just {p.product.pricePerMonthString} a month
+                      </AppText>
+                    )}
+                  </View>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <AppText weight="semibold">
                       {p.product.priceString}
                       <AppText variant="caption" muted>
                         {' '}
                         {perLabel(p)}
                       </AppText>
                     </AppText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <Banner>
-              {pro.storeReady
-                ? 'Plans are loading. Check your connection and try again.'
-                : 'Purchases aren’t available in this build. Install the App Store version to subscribe.'}
-            </Banner>
-          )}
+                    {annual && saving !== null && <Stamp label={`save ${saving}%`} tilt={-4} style={{ paddingHorizontal: 8 }} />}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <Banner>
+            {pro.storeReady
+              ? 'Plans are loading. Check your connection and try again.'
+              : 'Purchases aren’t available in this build. Install the App Store version to subscribe.'}
+          </Banner>
+        )}
 
-          {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Banner tone="danger">{error}</Banner>}
 
-          <Button title={trial ? `Start ${trial}` : 'Subscribe'} icon="sparkles" onPress={buy} loading={busy === 'buy'} disabled={!selected} />
-          <Button title="Restore purchases" kind="ghost" onPress={restore} loading={busy === 'restore'} disabled={!pro.storeReady && !preview} />
+        <Button title={trial ? `Start ${trial}` : 'Subscribe'} onPress={buy} loading={busy === 'buy'} disabled={!selected} />
+        <Button title="Restore purchases" kind="ghost" onPress={restore} loading={busy === 'restore'} disabled={!pro.storeReady && !preview} />
 
-          <AppText variant="caption" muted center>
-            {selected
-              ? `${trial ? `After the ${trial}, ` : ''}${selected.product.priceString} ${perLabel(selected)} is charged to your App Store or Google Play account. `
-              : ''}
-            The subscription renews automatically unless you cancel at least 24 hours before the end of the current period. Manage or cancel any time
-            in your account settings.
-          </AppText>
-          <Row style={{ justifyContent: 'center', gap: space.lg }}>
-            {TERMS_URL ? (
-              <Pressable onPress={() => Linking.openURL(TERMS_URL)} accessibilityRole="link">
-                <AppText variant="caption" weight="bold" color={c.primary}>
-                  Terms of Use
-                </AppText>
-              </Pressable>
-            ) : null}
-            {PRIVACY_URL ? (
-              <Pressable onPress={() => Linking.openURL(PRIVACY_URL)} accessibilityRole="link">
-                <AppText variant="caption" weight="bold" color={c.primary}>
-                  Privacy Policy
-                </AppText>
-              </Pressable>
-            ) : null}
-          </Row>
-          {__DEV__ && !PRIVACY_URL && (
-            <Banner tone="warn" icon="construct-outline">
-              Developer note: the Terms and Privacy links appear once extra.apiUrl in app.json points at your AI server, which hosts both pages.
-              App Review needs them on this screen.
-            </Banner>
-          )}
-        </View>
+        <AppText variant="caption" faint center>
+          {selected
+            ? `${trial ? `After the ${trial}, ` : ''}${selected.product.priceString} ${perLabel(selected)} is charged to your App Store or Google Play account. `
+            : ''}
+          The subscription renews automatically unless you cancel at least 24 hours before the end of the current period. Manage or cancel any time in
+          your account settings.
+        </AppText>
+        <Row style={{ justifyContent: 'center', gap: space.lg }}>
+          {TERMS_URL ? <TextLink label="Terms of Use" onPress={() => Linking.openURL(TERMS_URL)} /> : null}
+          {PRIVACY_URL ? <TextLink label="Privacy Policy" onPress={() => Linking.openURL(PRIVACY_URL)} /> : null}
+        </Row>
+        {__DEV__ && !PRIVACY_URL && (
+          <Banner tone="warn">
+            Developer note: the Terms and Privacy links appear once extra.apiUrl in app.json points at your AI server, which hosts both pages. App
+            Review needs them on this screen.
+          </Banner>
+        )}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.xl,
-    paddingBottom: space.xxl + space.lg,
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
-  },
-  close: {
-    position: 'absolute',
-    right: space.lg,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(246,244,238,0.14)',
-  },
-  plan: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderRadius: radius.md, padding: space.lg },
-  saveBadge: { borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  close: { alignSelf: 'flex-end', width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginBottom: -space.xl },
+  plan: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18 },
+  radio: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.4, borderColor: colors.ink },
 });

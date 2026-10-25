@@ -44,7 +44,10 @@ export interface AIProvider {
   checkKey(): Promise<KeyStatus>;
 }
 
-const NEEDS_VS_WANTS = `Needs are essentials for safety, health and earning a living: housing, utilities, basic groceries and household supplies, medicine and health care, insurance, debt payments, childcare, education, and transport to work or school.
+// Xpense is for people who have just started earning: first jobs, students and teens saving up, mostly living on their own.
+const AUDIENCE = `Most people using Xpense have just started earning: a first job, a part-time job next to school, or saving up for something big. Most live on their own or are about to.`;
+
+const NEEDS_VS_WANTS = `Needs are essentials for safety, health and earning a living: rent and housing, utilities and a basic phone plan, basic groceries and household supplies, medicine and health care, insurance, debt payments, childcare, school or work supplies, and transport to work or school.
 Wants are everything else: dining out and takeaway, snacks, sweets and alcohol, entertainment, hobbies, non-essential shopping, subscriptions and upgrades.
 When an item could be either, basic versions are needs and treats or premium extras are wants.`;
 
@@ -64,15 +67,36 @@ ${NEEDS_VS_WANTS}
 Each reason is at most 8 neutral words. Never shame the user.
 Set confidence to low if the photo is blurry or cut off, or if the items clearly do not add up to the subtotal.`;
 
-const CHECK_SYSTEM = `You are a calm, practical money coach inside Xpense, a budgeting app that helps people spend on needs, not wants. The user is thinking about buying something.
+const CHECK_SYSTEM = `You are a calm, practical money coach inside Xpense, a budgeting app that helps people spend on needs, not wants. ${AUDIENCE} The user is thinking about buying something.
 ${NEEDS_VS_WANTS}
+When their budget is given, judge the purchase against it, not in general:
+- More than what is safe to spend this month: "skip" for a want, or "wait" until after payday; for a real need, say it is a need and suggest how to cover it.
+- More than about a third of what is safe to spend, or it would delay what they are saving for: usually "wait".
+- A small share of what is safe to spend: "go" is fine, even for a want.
+Mention the trade-off in their terms when it helps (days of their budget, or how it affects what they are saving for), using only the numbers given.
 Verdict: "go" when it is a reasonable purchase, "wait" when sleeping on it for a few days would help, "skip" when it is likely to be regretted.
-Keep the reason to one or two kind, non-judgmental sentences. Suggest a realistic cheaper alternative when there is one (second-hand, a cheaper brand, borrowing, a free option), otherwise null. Ask up to 3 short questions the user can ask themselves before buying. Do not lecture.`;
+Keep the reason to one or two kind, non-judgmental sentences, like a friend who is good with money. Suggest a realistic cheaper alternative when there is one (second-hand, a cheaper brand, borrowing, a free option), otherwise null. Ask up to 3 short questions the user can ask themselves before buying. Do not lecture.`;
 
-const REVIEW_SYSTEM = `You write a short monthly money review inside Xpense, a budgeting app that helps people keep money safe for needs and spend less on wants. You receive this month's totals (and last month's needs and wants, when known).
+const REVIEW_SYSTEM = `You write a short monthly money review inside Xpense, a budgeting app that helps people keep money safe for needs and spend less on wants. ${AUDIENCE} You receive this month's totals (and last month's needs and wants, when known, and what they are saving for, when given).
 Use only the numbers given; do not invent figures. Be warm, specific and brief, like a supportive friend who is good with money.
 safety_score (0-100) reflects: saving at least the savings goal (income minus spending), spending staying within income, and how much of spending went to needs rather than wants. Around 50 is an average month.
 Tips must be specific to the categories that drove the wants, and practical this week.`;
+
+/** The buy-check question, with the person's budget this month when the app sent it (numbers only). */
+export function checkPrompt(req: CheckRequest): string {
+  const lines = [`Item: ${req.item}`, `Price: ${req.price} ${req.currency}`];
+  const b = req.budget;
+  if (b) {
+    lines.push('', `Their budget this month (${req.currency}):`);
+    lines.push(`- Safe to spend for the rest of the month: ${b.safe_to_spend}, with ${b.days_left} ${b.days_left === 1 ? 'day' : 'days'} left`);
+    lines.push(`- Already spent on wants this month: ${b.wants_so_far}`);
+    if (b.monthly_income !== null) lines.push(`- Monthly take-home pay: ${b.monthly_income}`);
+    if (b.hourly_pay !== null) lines.push(`- Pay per hour of work: ${b.hourly_pay}`);
+    if (b.savings_goal !== null) lines.push(`- Saving each month: ${b.savings_goal}${b.saving_for ? ` (for ${b.saving_for})` : ''}`);
+    else if (b.saving_for) lines.push(`- Saving up for: ${b.saving_for}`);
+  }
+  return lines.join('\n');
+}
 
 export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
   // `timeout` bounds the wait for the response to start; DEADLINE_MS bounds the whole answer.
@@ -140,13 +164,7 @@ export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
         ],
         32_000,
       ),
-    checkPurchase: (req) =>
-      ask(
-        CheckSchema,
-        CHECK_SYSTEM,
-        [{ type: 'text', text: `Item: ${req.item}\nPrice: ${req.price} ${req.currency}` }],
-        16_000,
-      ),
+    checkPurchase: (req) => ask(CheckSchema, CHECK_SYSTEM, [{ type: 'text', text: checkPrompt(req) }], 16_000),
     monthlyReview: (req) =>
       ask(ReviewSchema, REVIEW_SYSTEM, [{ type: 'text', text: JSON.stringify(req) }], 16_000),
     checkKey: async () => {

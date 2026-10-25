@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 
 type Extra = {
   apiUrl?: string;
+  supabaseUrl?: string;
+  supabaseKey?: string;
   revenueCatIosKey?: string;
   revenueCatAndroidKey?: string;
   privacyUrl?: string;
@@ -31,6 +33,17 @@ const SERVER = /^https:\/\//.test(API_URL) ? API_URL : '';
 export const PRIVACY_URL = extra.privacyUrl || (SERVER && `${SERVER}/privacy`);
 export const TERMS_URL = extra.termsUrl || (SERVER ? `${SERVER}/terms` : Platform.OS === 'ios' ? APPLE_STANDARD_EULA : '');
 export const SUPPORT_URL = extra.supportUrl || (SERVER && `${SERVER}/support`);
+
+/**
+ * Accounts and sync run on Supabase: the project URL and its publishable (anon) key, from app.json
+ * (or EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_KEY in a local .env). The publishable key is
+ * safe to ship in the app; row-level security keeps each account's data to itself.
+ */
+export const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || extra.supabaseUrl || '').replace(/\/$/, '');
+export const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_KEY || extra.supabaseKey || '';
+export const ACCOUNTS_READY = /^https:\/\//.test(SUPABASE_URL) && SUPABASE_KEY.length > 20;
+/** Development builds without Supabase can be tried with a local, unsynced preview account. */
+export const PREVIEW_ACCOUNT = __DEV__ && !ACCOUNTS_READY;
 
 export const PRO_ENTITLEMENT = 'pro';
 // Shown in the app's copy; keep them equal to FREE_TRIAL_SCANS and PRO_MONTHLY_SCANS in worker/wrangler.toml.

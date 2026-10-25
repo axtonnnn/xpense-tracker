@@ -1,14 +1,11 @@
-// Xpense brand mark: an X made of four slim leaves. The "/" diagonal is needs, the "\" diagonal is
-// wants — the app's whole idea in one symbol. Geometry is on a 1024 × 1024 canvas centred at (512, 512).
-// The same numbers drive the in-app <LogoMark /> (src/components/brand.tsx); keep them in sync.
+// Xpense brand mark: an X made of four slim leaves, drawn in ink. The "/" diagonal is needs (solid ink),
+// the "\" diagonal is wants (pencil hatching) — the app's whole idea in one symbol. Geometry is on a
+// 1024 × 1024 canvas centred at (512, 512). The same numbers drive the in-app <LogoMark />
+// (src/components/brand.tsx) and the website (worker/src/pages.ts); keep them in sync.
 
-export const GEOMETRY = { r0: 14, R: 400, w: 86, rib: 14 };
+export const GEOMETRY = { r0: 14, R: 400, w: 86 };
 
-export const COLORS = {
-  light: { need: '#0E8066', want: '#CC8418', rib: '#F6F4EE', word: '#1E5B4F' },
-  dark: { need: '#8FD3B6', want: '#F0BE5C', rib: '#123F36', word: '#E9EFEC' },
-  icon: { need: '#8FD3B6', want: '#F0BE5C', rib: '#1A5747', top: '#23715F', bottom: '#123F36' },
-};
+export const COLORS = { ink: '#111111', paper: '#F6F2EA', page: '#FFFFFF' };
 
 /** One leaf pointing along +x: base at r0 (near the centre), tip at R, widest just past the middle. */
 export function leafPath({ r0, R, w } = GEOMETRY) {
@@ -21,36 +18,33 @@ export function leafPath({ r0, R, w } = GEOMETRY) {
 export const NEED_ANGLES = [-45, 135];
 export const WANT_ANGLES = [-135, 45];
 
-function leaf(angle, fill, rib, { ribs = true, g = GEOMETRY, cx = 512, cy = 512, scale = 1 } = {}) {
-  const start = g.r0 + (g.R - g.r0) * 0.16;
-  const end = g.R - (g.R - g.r0) * 0.2;
-  const ribPath = ribs
-    ? `<path d="M ${start.toFixed(1)} 0 L ${end.toFixed(1)} 0" stroke="${rib}" stroke-width="${g.rib}" stroke-linecap="round"/>`
-    : '';
-  return `<g transform="translate(${cx} ${cy}) scale(${scale}) rotate(${angle})"><path d="${leafPath(g)}" fill="${fill}"/>${ribPath}</g>`;
-}
+const leaf = (angle, attrs, { cx = 512, cy = 512, scale = 1 } = {}) =>
+  `<g transform="translate(${cx} ${cy}) scale(${scale}) rotate(${angle})"><path d="${leafPath()}" ${attrs}/></g>`;
 
-/** The mark's leaves; pick which diagonals to draw (used for the Icon Composer layers). */
-export function leaves(colors, { which = 'both', ribs = true, scale = 1 } = {}) {
+/**
+ * The mark's leaves. `which` picks the diagonals (the Icon Composer bundle has them as layers);
+ * `hatch` is the spacing of the wants' pencil lines in canvas units, or 0 for plain outlines (tiny sizes).
+ */
+export function leaves({ which = 'both', scale = 1, hatch = 36, ink = COLORS.ink, fill = COLORS.paper, id = 'hatch' } = {}) {
   const parts = [];
-  if (which !== 'wants') NEED_ANGLES.forEach((a) => parts.push(leaf(a, colors.need, colors.rib, { ribs, scale })));
-  if (which !== 'needs') WANT_ANGLES.forEach((a) => parts.push(leaf(a, colors.want, colors.rib, { ribs, scale })));
+  const outline = Math.round(16 / Math.max(scale, 0.5));
+  if (hatch && which !== 'needs') {
+    parts.push(
+      `<defs><pattern id="${id}" patternUnits="userSpaceOnUse" width="${hatch}" height="${hatch}" patternTransform="rotate(45)"><line x1="${hatch / 2}" y1="0" x2="${hatch / 2}" y2="${hatch}" stroke="${ink}" stroke-width="${hatch / 4}"/></pattern></defs>`,
+    );
+  }
+  if (which !== 'wants') NEED_ANGLES.forEach((a) => parts.push(leaf(a, `fill="${ink}"`, { scale })));
+  if (which !== 'needs')
+    WANT_ANGLES.forEach((a) => parts.push(leaf(a, `fill="${hatch ? `url(#${id})` : fill}" stroke="${ink}" stroke-width="${outline}"`, { scale })));
   return parts.join('');
 }
 
-/** A silhouette for single-colour uses (Android themed icon): white leaves with the ribs cut out. */
+/** A single-colour silhouette (Android themed icon): white needs leaves, outlined wants leaves. */
 export function silhouette({ scale = 1 } = {}) {
-  const all = [...NEED_ANGLES, ...WANT_ANGLES];
-  // In the mask, white leaves keep the shape and black ribs punch through it.
-  return `<defs><mask id="ribs" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
-    <rect width="1024" height="1024" fill="black"/>${all.map((a) => leaf(a, 'white', 'black', { scale })).join('')}</mask></defs>
-    <rect width="1024" height="1024" fill="white" mask="url(#ribs)"/>`;
+  return leaves({ scale, hatch: 0, ink: 'white', fill: 'transparent' });
 }
 
-export function iconBackground(id = 'bg') {
-  const { top, bottom } = COLORS.icon;
-  return `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="1024" height="1024" fill="url(#${id})"/>`;
-}
+export const paperBackground = () => `<rect width="1024" height="1024" fill="${COLORS.paper}"/>`;
 
 export const svg = (body, size = 1024, viewBox = '0 0 1024 1024') =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${viewBox}">${body}</svg>`;

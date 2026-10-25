@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { Necessity } from '../../shared/schemas';
+import { recordDeletions } from './changes';
 import { newId, nowISO } from './ids';
 import { notifyChange } from './live';
 import { inTransaction } from './tx';
@@ -26,6 +27,7 @@ export type Tx = {
   receipt_id: string | null;
   recurring_id: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type ReceiptRow = {
@@ -64,6 +66,8 @@ export type NewTx = {
   occurredOn: string;
   source?: TxSource;
   recurringId?: string | null;
+  /** A fixed id (repeating entries use rule:date, so two devices booking the same paycheck agree). */
+  id?: string;
 };
 
 /** For a manual expense the whole amount goes into one bucket; income has no need/want split. */
@@ -73,12 +77,14 @@ export function splitFor(type: TxType, amountCents: number, necessity?: Necessit
 }
 
 export async function insertTransaction(db: SQLiteDatabase, tx: NewTx, notify = true): Promise<string> {
-  const id = newId();
+  const id = tx.id ?? newId();
   const split = splitFor(tx.type, tx.amountCents, tx.necessity);
+  const now = nowISO();
+  // A fixed id that already exists was booked by another device and synced here: keep that one.
   await db.runAsync(
-    `INSERT INTO transactions (id, type, amount_cents, need_cents, want_cents, currency, merchant, note, category,
-       occurred_on, source, recurring_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT ${tx.id ? 'OR IGNORE ' : ''}INTO transactions (id, type, amount_cents, need_cents, want_cents, currency, merchant, note,
+       category, occurred_on, source, recurring_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     tx.type,
     tx.amountCents,
@@ -91,7 +97,8 @@ export async function insertTransaction(db: SQLiteDatabase, tx: NewTx, notify = 
     tx.occurredOn,
     tx.source ?? 'manual',
     tx.recurringId ?? null,
-    nowISO(),
+    now,
+    now,
   );
   if (notify) notifyChange();
   return id;
@@ -122,7 +129,7 @@ export async function updateTransaction(db: SQLiteDatabase, id: string, patch: T
   }
   await db.runAsync(
     `UPDATE transactions SET amount_cents = ?, need_cents = ?, want_cents = ?, merchant = ?, note = ?,
-       category = ?, occurred_on = ? WHERE id = ?`,
+       category = ?, occurred_on = ?, updated_at = ?, dirty = 1 WHERE id = ?`,
     amount,
     need,
     want,
@@ -130,6 +137,7 @@ export async function updateTransaction(db: SQLiteDatabase, id: string, patch: T
     patch.note !== undefined ? patch.note?.trim() || null : current.note,
     patch.category ?? current.category,
     patch.occurredOn ?? current.occurred_on,
+    nowISO(),
     id,
   );
   notifyChange();
@@ -141,13 +149,21 @@ export async function deleteTransaction(db: SQLiteDatabase, id: string): Promise
   let imageUri: string | null = null;
   await inTransaction(db, async () => {
     await db.runAsync('DELETE FROM transactions WHERE id = ?', id);
+    await recordDeletions(db, 'transaction', [id]);
     if (tx.receipt_id) {
       const r = await db.getFirstAsync<{ image_uri: string | null }>(
         'SELECT image_uri FROM receipts WHERE id = ?',
         tx.receipt_id,
       );
       imageUri = r?.image_uri ?? null;
+      const items = await db.getAllAsync<{ id: string }>('SELECT id FROM receipt_items WHERE receipt_id = ?', tx.receipt_id);
       await db.runAsync('DELETE FROM receipts WHERE id = ?', tx.receipt_id);
+      await recordDeletions(db, 'receipt', [tx.receipt_id]);
+      await recordDeletions(
+        db,
+        'receipt_item',
+        items.map((it) => it.id),
+      );
     }
   });
   if (imageUri) deleteReceiptImage(imageUri);
@@ -196,10 +212,11 @@ export async function saveScannedReceipt(
   const receiptId = newId();
   const txId = newId();
   const split = splitTotal(draft);
+  const now = nowISO();
   await inTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO receipts (id, image_uri, doc_type, merchant, subtotal_cents, tax_cents, tip_cents, total_cents,
-         due_on, ai_json, scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         due_on, ai_json, scanned_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       receiptId,
       imageUri,
       draft.docType,
@@ -210,12 +227,13 @@ export async function saveScannedReceipt(
       draft.totalCents,
       draft.dueDate,
       aiJson,
-      nowISO(),
+      now,
+      now,
     );
     for (const [i, item] of draft.items.entries()) {
       await db.runAsync(
-        `INSERT INTO receipt_items (id, receipt_id, position, name, qty, total_cents, category, necessity, reason)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO receipt_items (id, receipt_id, position, name, qty, total_cents, category, necessity, reason, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         newId(),
         receiptId,
         i,
@@ -225,11 +243,12 @@ export async function saveScannedReceipt(
         item.category,
         item.necessity,
         item.reason,
+        now,
       );
     }
     await db.runAsync(
       `INSERT INTO transactions (id, type, amount_cents, need_cents, want_cents, currency, merchant, note, category,
-         occurred_on, source, receipt_id, created_at) VALUES (?, 'expense', ?, ?, ?, ?, ?, ?, ?, ?, 'scan', ?, ?)`,
+         occurred_on, source, receipt_id, created_at, updated_at) VALUES (?, 'expense', ?, ?, ?, ?, ?, ?, ?, ?, 'scan', ?, ?, ?)`,
       txId,
       draft.totalCents,
       split.need,
@@ -240,7 +259,8 @@ export async function saveScannedReceipt(
       transactionCategory(draft),
       draft.date,
       receiptId,
-      nowISO(),
+      now,
+      now,
     );
   });
   notifyChange();
@@ -264,8 +284,15 @@ export async function setItemNecessity(
       necessity: found.tx.need_cents >= found.tx.want_cents ? 'need' : 'want',
       items: items.map((it) => ({ totalCents: it.total_cents, necessity: it.necessity })),
     });
-    await db.runAsync('UPDATE receipt_items SET necessity = ? WHERE id = ?', necessity, itemId);
-    await db.runAsync('UPDATE transactions SET need_cents = ?, want_cents = ? WHERE id = ?', split.need, split.want, txId);
+    const now = nowISO();
+    await db.runAsync('UPDATE receipt_items SET necessity = ?, updated_at = ?, dirty = 1 WHERE id = ?', necessity, now, itemId);
+    await db.runAsync(
+      'UPDATE transactions SET need_cents = ?, want_cents = ?, updated_at = ?, dirty = 1 WHERE id = ?',
+      split.need,
+      split.want,
+      now,
+      txId,
+    );
   });
   notifyChange();
 }
@@ -274,13 +301,15 @@ export async function allTransactions(db: SQLiteDatabase): Promise<Tx[]> {
   return db.getAllAsync<Tx>('SELECT * FROM transactions ORDER BY occurred_on DESC, created_at DESC');
 }
 
+/** Wipes this account's copy on the device (after the account itself was deleted). Nothing is synced. */
 export async function deleteAllData(db: SQLiteDatabase): Promise<string[]> {
   const images = await db.getAllAsync<{ image_uri: string }>(
     'SELECT image_uri FROM receipts WHERE image_uri IS NOT NULL',
   );
   await inTransaction(db, async () => {
     await db.execAsync(
-      'DELETE FROM transactions; DELETE FROM receipt_items; DELETE FROM receipts; DELETE FROM recurring; DELETE FROM settings;',
+      `DELETE FROM transactions; DELETE FROM receipt_items; DELETE FROM receipts; DELETE FROM recurring; DELETE FROM settings;
+       DELETE FROM sync_deletes; DELETE FROM sync_state;`,
     );
   });
   images.forEach((r) => deleteReceiptImage(r.image_uri));

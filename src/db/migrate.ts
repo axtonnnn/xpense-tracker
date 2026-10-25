@@ -65,6 +65,35 @@ const MIGRATIONS: string[] = [
   `,
   // 2: a repeating entry's note is copied onto each entry it books.
   `ALTER TABLE recurring ADD COLUMN note TEXT;`,
+  // 3: sync. Every synced row knows when it last changed and whether that change is still to be uploaded;
+  // deletions leave a marker until the server has them. See src/db/sync.ts.
+  `
+  ALTER TABLE transactions ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+  ALTER TABLE transactions ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE receipts ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+  ALTER TABLE receipts ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE receipt_items ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+  ALTER TABLE receipt_items ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE recurring ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+  ALTER TABLE recurring ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE settings ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+  ALTER TABLE settings ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+  UPDATE transactions SET updated_at = created_at;
+  UPDATE receipts SET updated_at = scanned_at;
+  UPDATE receipt_items SET updated_at = COALESCE((SELECT scanned_at FROM receipts r WHERE r.id = receipt_items.receipt_id), '');
+  UPDATE recurring SET updated_at = created_at;
+  UPDATE settings SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');
+  CREATE TABLE sync_deletes (
+    kind TEXT NOT NULL,
+    id TEXT NOT NULL,
+    deleted_at TEXT NOT NULL,
+    PRIMARY KEY (kind, id)
+  );
+  CREATE TABLE sync_state (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL
+  );
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

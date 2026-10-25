@@ -5,7 +5,7 @@ import type { Env, KV } from '../src/env';
 import { createHandler } from '../src/index';
 import { renderMarkdown } from '../src/markdown';
 
-const kv: KV = { get: async () => null, put: async () => undefined };
+const kv: KV = { get: async () => null, put: async () => undefined, delete: async () => undefined, list: async () => ({ keys: [], list_complete: true }) };
 const handle = createHandler({ ai: () => ({}) as AIProvider });
 
 const filled: Partial<Env> = {
@@ -68,23 +68,45 @@ describe('public pages', () => {
   });
 
   it('serves the home page, tolerates a trailing slash and answers HEAD', async () => {
-    expect((await get('/')).html).toContain('Spend on what matters.');
+    const { html } = await get('/');
+    expect(html).toContain('Spend on what matters.');
+    expect(html).toContain('How it works');
+    expect(html).toContain('3 free AI receipt scans');
+    expect(html).toContain('Up to 300 AI receipt scans a month');
     expect((await get('/support/')).res.status).toBe(200);
     const head = await get('/terms', filled, 'HEAD');
     expect(head.res.status).toBe(200);
     expect(head.html).toBe('');
   });
 
-  it('adds an App Store button only for an https link', async () => {
-    expect((await get('/', { APP_STORE_URL: 'https://apps.apple.com/app/id123' })).html).toContain('href="https://apps.apple.com/app/id123"');
-    expect((await get('/', { APP_STORE_URL: 'javascript:alert(1)' })).html).not.toContain('javascript:');
+  it('adds store buttons only for https links, and says "coming soon" until then', async () => {
+    const live = (await get('/', { APP_STORE_URL: 'https://apps.apple.com/app/id123', PLAY_STORE_URL: 'https://play.google.com/store/apps/details?id=x' })).html;
+    expect(live).toContain('href="https://apps.apple.com/app/id123"');
+    expect(live).toContain('Get it on Google Play');
+    expect(live).not.toContain('coming soon');
+    const unsafe = (await get('/', { APP_STORE_URL: 'javascript:alert(1)' })).html;
+    expect(unsafe).not.toContain('javascript:');
+    expect(unsafe).toContain('coming soon to the App Store');
+  });
+
+  it('loads its fonts from this site only', async () => {
+    const { res, html } = await get('/');
+    expect(html).toContain('url(/fonts/instrument-serif.woff2)');
+    expect(html).not.toContain('googleapis');
+    expect(res.headers.get('Content-Security-Policy')).toContain("font-src 'self'");
   });
 
   it('reports which settings are present on /health, without their values', async () => {
     const health = JSON.parse((await get('/health', { CONTACT_EMAIL: 'help@xpense.example', REVENUECAT_SECRET_KEY: 'sk_secret' })).html);
     expect(health).toEqual({
       ok: true,
-      configured: { anthropic_key: true, revenuecat_key: true, missing_page_settings: ['OWNER_NAME', 'GOVERNING_LAW', 'LAST_UPDATED'] },
+      configured: {
+        anthropic_key: true,
+        revenuecat_key: true,
+        supabase_url: false,
+        supabase_secret_key: false,
+        missing_page_settings: ['OWNER_NAME', 'GOVERNING_LAW', 'LAST_UPDATED'],
+      },
     });
     expect(JSON.stringify(health)).not.toContain('sk_secret');
   });

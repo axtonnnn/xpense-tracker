@@ -10,6 +10,14 @@ export function notifyChange(): void {
   listeners.forEach((l) => l());
 }
 
+/** Called after every write (sync uses it to upload changes soon after they're made). */
+export function onChange(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /**
  * Runs `query` now and again after every write. `deps` are the values the query closes over
  * (e.g. a date range); the query re-runs when they change.

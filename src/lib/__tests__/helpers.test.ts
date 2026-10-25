@@ -55,7 +55,7 @@ describe('categorize', () => {
     ['Shell gas station', 'transport', 'need'],
     ['CVS pharmacy', 'health', 'need'],
   ])('%s → %s (%s)', (text, category, necessity) => {
-    expect(categorize(text)).toEqual({ category, necessity });
+    expect(categorize(text)).toMatchObject({ category, necessity });
   });
 
   it('returns null when unsure', () => {

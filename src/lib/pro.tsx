@@ -9,7 +9,6 @@ import Purchases, {
 } from 'react-native-purchases';
 
 import { PRO_ENTITLEMENT, REVENUECAT_KEY } from './config';
-import { getInstallId } from './install-id';
 import { useSettings } from '@/db/settings';
 
 type ProState = {
@@ -29,7 +28,14 @@ const ProContext = createContext<ProState | null>(null);
 
 const hasPro = (info: CustomerInfo) => PRO_ENTITLEMENT in info.entitlements.active;
 
-export function ProProvider({ children }: { children: ReactNode }) {
+// RevenueCat is configured once per app run; later accounts switch with logIn.
+let configuredFor: string | null | undefined;
+
+/**
+ * Pro status for the signed-in account. RevenueCat knows each customer by their Xpense account id, so a
+ * subscription follows the person to every device they sign in on (the AI server checks the same id).
+ */
+export function ProProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const settings = useSettings();
   const [entitled, setEntitled] = useState(false);
   const [storeReady, setStoreReady] = useState(false);
@@ -47,7 +53,13 @@ export function ProProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        Purchases.configure({ apiKey: REVENUECAT_KEY, appUserID: await getInstallId() });
+        const appUserID = userId === 'preview' ? null : userId;
+        if (configuredFor === undefined) {
+          Purchases.configure({ apiKey: REVENUECAT_KEY, appUserID });
+        } else if (appUserID && configuredFor !== appUserID) {
+          await Purchases.logIn(appUserID);
+        }
+        configuredFor = appUserID;
         Purchases.addCustomerInfoUpdateListener(apply);
         const [info, offerings] = await Promise.all([Purchases.getCustomerInfo(), Purchases.getOfferings()]);
         if (cancelled) return;
@@ -71,7 +83,7 @@ export function ProProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       Purchases.removeCustomerInfoUpdateListener(apply);
     };
-  }, [apply]);
+  }, [apply, userId]);
 
   const purchase = useCallback(
     async (pkg: PurchasesPackage) => {

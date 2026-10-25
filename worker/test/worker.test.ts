@@ -5,7 +5,8 @@ import { AIError, type AIProvider } from '../src/ai/claude';
 import type { Env, KV } from '../src/env';
 import { createHandler } from '../src/index';
 
-const INSTALL = '3f2b8c1e-4d5a-4b6c-8e7f-0123456789ab';
+const USER = '3f2b8c1e-4d5a-4b6c-8e7f-0123456789ab';
+const TOKEN = 'signed-in-token';
 const NOW = new Date('2026-10-23T12:00:00Z');
 
 const receipt: ReceiptResult = {
@@ -34,10 +35,16 @@ class MemoryKV implements KV {
   async put(key: string, value: string) {
     this.store.set(key, value);
   }
+  async delete(key: string) {
+    this.store.delete(key);
+  }
+  async list({ prefix }: { prefix: string }) {
+    return { keys: [...this.store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true };
+  }
 }
 
 function setup(
-  opts: { pro?: boolean; rcStatus?: number; ai?: Partial<AIProvider>; env?: Partial<Env>; keepaliveMs?: number } = {},
+  opts: { pro?: boolean; rcStatus?: number; supabaseStatus?: number; ai?: Partial<AIProvider>; env?: Partial<Env>; keepaliveMs?: number } = {},
 ) {
   const kv = new MemoryKV();
   const env: Env = { ANTHROPIC_API_KEY: 'test', REVENUECAT_SECRET_KEY: 'rc_secret', USAGE: kv, ...opts.env };
@@ -48,19 +55,23 @@ function setup(
     checkKey: vi.fn(async () => 'ok' as const),
     ...opts.ai,
   };
-  const fetchImpl = vi.fn(async () => {
+  const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('supabase.co')) return new Response('{}', { status: opts.supabaseStatus ?? 200 });
     if (opts.rcStatus && opts.rcStatus !== 200) return new Response('{}', { status: opts.rcStatus });
+    if (init?.method === 'DELETE') return Response.json({ app_user_id: USER });
     const entitlements = opts.pro ? { pro: { expires_date: '2027-01-01T00:00:00Z' } } : {};
     return Response.json({ subscriber: { entitlements } });
   }) as unknown as typeof fetch;
-  const handle = createHandler({ ai: () => ai, fetchImpl, now: () => NOW, keepaliveMs: opts.keepaliveMs });
+  // Stands in for the Supabase signature check (covered in auth.test.ts).
+  const verify = vi.fn(async (token: string) => (token === TOKEN ? USER : null));
+  const handle = createHandler({ ai: () => ai, verify, fetchImpl, now: () => NOW, keepaliveMs: opts.keepaliveMs });
   return { handle, env, kv, ai, fetchImpl };
 }
 
 function post(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`https://xpense.example${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Install-Id': INSTALL, ...headers },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}`, ...headers },
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
 }
@@ -72,11 +83,23 @@ const scanBody = { image_base64: 'a'.repeat(200), media_type: 'image/jpeg', curr
 const checkBody = { item: 'Headphones', price: 199, currency: 'USD' };
 
 describe('request validation', () => {
-  it('rejects a missing install id', async () => {
-    const { handle, env } = setup();
-    const res = await handle(post('/v1/scan', scanBody, { 'X-Install-Id': 'nope' }), env);
-    expect(res.status).toBe(400);
-    expect((await read(res)).error.code).toBe('bad_install_id');
+  it('rejects requests without a valid sign-in', async () => {
+    const { handle, env, ai } = setup();
+    for (const auth of ['', 'Bearer nope', 'Basic abc']) {
+      const res = await handle(post('/v1/scan', scanBody, { Authorization: auth }), env);
+      expect(res.status).toBe(401);
+      expect((await read(res)).error.code).toBe('signed_out');
+    }
+    expect(ai.scanReceipt).not.toHaveBeenCalled();
+  });
+
+  it('lets wrangler dev without Supabase use DEV_USER_ID', async () => {
+    const { handle, env } = setup({ env: { DEV_USER_ID: 'dev-user' } });
+    const res = await handle(post('/v1/scan', scanBody, { Authorization: '' }), env);
+    expect(res.status).toBe(200);
+    // …but never once Supabase is configured.
+    const prod = setup({ env: { DEV_USER_ID: 'dev-user', SUPABASE_URL: 'https://abc.supabase.co' } });
+    expect((await prod.handle(post('/v1/scan', scanBody, { Authorization: '' }), prod.env)).status).toBe(401);
   });
 
   it('rejects malformed and incomplete bodies', async () => {
@@ -123,7 +146,7 @@ describe('free trial', () => {
     // AI answers stream (status 200 is sent first), so AI errors arrive in the body.
     expect(res.status).toBe(200);
     expect((await read(res)).error).toEqual({ code: 'ai_declined', message: 'Nope', status: 422 });
-    expect(kv.store.get(`trial:${INSTALL}`)).toBeUndefined();
+    expect(kv.store.get(`trial:${USER}`)).toBeUndefined();
   });
 
   it('keeps buy checks and reviews Pro-only', async () => {
@@ -142,15 +165,15 @@ describe('Pro', () => {
     expect((await read(first)).result.verdict).toBe('wait');
     await handle(post('/v1/check', checkBody), env);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(kv.store.get(`pro:${INSTALL}`)).toBe('1');
+    expect(kv.store.get(`pro:${USER}`)).toBe('1');
   });
 
   it('does not touch the trial counter for Pro scans', async () => {
     const { handle, env, kv } = setup({ pro: true });
     const res = await handle(post('/v1/scan', scanBody), env);
     expect((await read(res)).trial_remaining).toBeNull();
-    expect(kv.store.get(`trial:${INSTALL}`)).toBeUndefined();
-    expect(kv.store.get(`usage:${INSTALL}:2026-10:scan`)).toBe('1');
+    expect(kv.store.get(`trial:${USER}`)).toBeUndefined();
+    expect(kv.store.get(`usage:${USER}:2026-10:scan`)).toBe('1');
   });
 
   it('treats an expired subscription as free', async () => {
@@ -165,7 +188,7 @@ describe('Pro', () => {
 
   it('enforces the monthly fair-use cap with 429', async () => {
     const { handle, env, kv } = setup({ pro: true, env: { PRO_MONTHLY_SCANS: '2' } });
-    kv.store.set(`usage:${INSTALL}:2026-10:scan`, '2');
+    kv.store.set(`usage:${USER}:2026-10:scan`, '2');
     const res = await handle(post('/v1/scan', scanBody), env);
     expect(res.status).toBe(429);
     expect((await read(res)).error.code).toBe('monthly_limit');
@@ -183,12 +206,12 @@ describe('Pro', () => {
     const res = await handle(post('/v1/scan', scanBody), env);
     expect(res.status).toBe(200);
     expect((await read(res)).trial_remaining).toBe(2);
-    expect(kv.store.get(`trial:${INSTALL}`)).toBe('1');
+    expect(kv.store.get(`trial:${USER}`)).toBe('1');
   });
 
   it('says "try again" rather than "upgrade" when the trial is used up during an outage', async () => {
     const { handle, env, kv } = setup({ rcStatus: 500 });
-    kv.store.set(`trial:${INSTALL}`, '3');
+    kv.store.set(`trial:${USER}`, '3');
     const res = await handle(post('/v1/scan', scanBody), env);
     expect(res.status).toBe(503);
     expect((await read(res)).error.code).toBe('store_unavailable');
@@ -203,15 +226,25 @@ describe('health', () => {
     expect(await (await handle(health(false), env)).json()).not.toHaveProperty('keys');
     expect(ai.checkKey).not.toHaveBeenCalled();
     const deep = (await (await handle(health(true), env)).json()) as { keys: unknown };
-    expect(deep.keys).toEqual({ anthropic: 'ok', revenuecat: 'ok' });
+    expect(deep.keys).toEqual({ anthropic: 'ok', revenuecat: 'ok', supabase: 'missing' });
     expect(fetchImpl).toHaveBeenCalledWith('https://api.revenuecat.com/v1/subscribers/xpense-key-check', expect.anything());
   });
 
   it('reports rejected and missing keys', async () => {
     const rejected = setup({ rcStatus: 401, ai: { checkKey: vi.fn(async () => 'invalid' as const) } });
-    expect(((await (await rejected.handle(health(true), rejected.env)).json()) as { keys: unknown }).keys).toEqual({ anthropic: 'invalid', revenuecat: 'invalid' });
+    expect(((await (await rejected.handle(health(true), rejected.env)).json()) as { keys: unknown }).keys).toEqual({
+      anthropic: 'invalid',
+      revenuecat: 'invalid',
+      supabase: 'missing',
+    });
     const missing = setup({ env: { ANTHROPIC_API_KEY: '', REVENUECAT_SECRET_KEY: undefined } });
-    expect(((await (await missing.handle(health(true), missing.env)).json()) as { keys: unknown }).keys).toEqual({ anthropic: 'missing', revenuecat: 'missing' });
+    expect(((await (await missing.handle(health(true), missing.env)).json()) as { keys: unknown }).keys).toEqual({
+      anthropic: 'missing',
+      revenuecat: 'missing',
+      supabase: 'missing',
+    });
+    const supa = setup({ supabaseStatus: 401, env: { SUPABASE_URL: 'https://abc.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_x' } });
+    expect(((await (await supa.handle(health(true), supa.env)).json()) as { keys: { supabase: string } }).keys.supabase).toBe('invalid');
   });
 
   it('rate-limits the deep check', async () => {
@@ -244,5 +277,41 @@ describe('slow answers', () => {
     const { handle, env } = setup({ ai: { checkPurchase: vi.fn(async () => Promise.reject(new Error('boom'))) }, pro: true });
     const res = await handle(post('/v1/check', checkBody), env);
     expect((await read(res)).error).toMatchObject({ code: 'ai_error', status: 502 });
+  });
+});
+
+describe('account deletion', () => {
+  const supabaseEnv = { SUPABASE_URL: 'https://abc.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_abc' };
+
+  it('deletes the sign-in, the usage counters and the RevenueCat customer', async () => {
+    const { handle, env, kv, fetchImpl } = setup({ env: supabaseEnv });
+    kv.store.set(`trial:${USER}`, '2');
+    kv.store.set(`usage:${USER}:2026-10:scan`, '4');
+    kv.store.set('trial:someone-else', '1');
+    const res = await handle(post('/v1/account/delete', {}), env);
+    expect(res.status).toBe(200);
+    expect(await read(res)).toEqual({ deleted: true });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `https://abc.supabase.co/auth/v1/admin/users/${USER}`,
+      expect.objectContaining({ method: 'DELETE', headers: expect.objectContaining({ apikey: 'sb_secret_abc' }) }),
+    );
+    // New-format secret keys are never sent as a Bearer token.
+    const supabaseCall = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([u]) => u.includes('supabase.co'));
+    expect((supabaseCall?.[1].headers as Record<string, string>).Authorization).toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith(`https://api.revenuecat.com/v1/subscribers/${USER}`, expect.objectContaining({ method: 'DELETE' }));
+    expect([...kv.store.keys()]).toEqual(['trial:someone-else']);
+  });
+
+  it('needs a signed-in account', async () => {
+    const { handle, env } = setup({ env: supabaseEnv });
+    expect((await handle(post('/v1/account/delete', {}, { Authorization: '' }), env)).status).toBe(401);
+  });
+
+  it('keeps everything and says so when Supabase refuses', async () => {
+    const { handle, env, kv } = setup({ env: supabaseEnv, supabaseStatus: 500 });
+    kv.store.set(`trial:${USER}`, '2');
+    const res = await handle(post('/v1/account/delete', {}), env);
+    expect(res.status).toBe(503);
+    expect(kv.store.get(`trial:${USER}`)).toBe('2');
   });
 });

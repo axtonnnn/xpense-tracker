@@ -1,15 +1,14 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import { Animated, Modal, Platform, StyleSheet, View } from 'react-native';
 
 import { LogoMark } from '@/components/brand';
 import { ConsentSheet } from '@/components/ConsentSheet';
-import { ReceiptScan } from '@/components/illustrations';
-import { AppText, Banner, Button, Card, Field, HeroCard, IconCircle, Pill, ProBadge, Row, Screen, SectionTitle } from '@/components/ui';
+import { ViewfinderSketch } from '@/components/illustrations';
+import { TxRow } from '@/components/money-ui';
+import { NeedMark, SketchCircle, SketchRule, Stamp, WantMark } from '@/components/sketch';
+import { AppText, Banner, Button, Card, Field, PageTitle, Pill, ProTag, Row, Screen, SectionTitle, tabular } from '@/components/ui';
 import type { CheckResult, ReviewResult } from '../../../shared/schemas';
 import { useLiveQuery } from '@/db/live';
 import { listRecurring } from '@/db/recurring';
@@ -18,15 +17,16 @@ import { listBetween, listRecentScans } from '@/db/transactions';
 import { ApiError, checkPurchase, monthlyReview, NeedsProError } from '@/lib/api';
 import { categoryBreakdown, hourlyRateCents, hoursOfWork, safeToSpend, totals } from '@/lib/budget';
 import { FREE_TRIAL_SCANS } from '@/lib/config';
-import { addMonths, endOfMonth, formatDay, monthKey, startOfMonth, today } from '@/lib/dates';
-import { formatMoney, fromCents, parseAmount } from '@/lib/money';
+import { addMonths, endOfMonth, monthKey, parseISODate, startOfMonth, today } from '@/lib/dates';
+import { fromCents, parseAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { pickImage, runScan, type PickSource } from '@/lib/scan';
-import { elevation, fonts, radius, space, useColors, useIsDark } from '@/theme/tokens';
+import { colors, space } from '@/theme/tokens';
+
+const VERDICT = { go: 'go for it', wait: 'sleep on it', skip: 'probably skip' } as const;
 
 export default function AIMode() {
   const db = useSQLiteContext();
-  const c = useColors();
   const settings = useSettings();
   const { isPro } = usePro();
   const requirePro = useRequirePro();
@@ -35,7 +35,7 @@ export default function AIMode() {
   const prevStart = addMonths(monthStart, -1, 1);
   const { data: txs } = useLiveQuery((d) => listBetween(d, prevStart, endOfMonth(t)), [prevStart, t]);
   const { data: recurring } = useLiveQuery(listRecurring, []);
-  const { data: scans } = useLiveQuery((d) => listRecentScans(d, 8), []);
+  const { data: scans } = useLiveQuery((d) => listRecentScans(d, 5), []);
 
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [busy, setBusy] = useState<null | 'scan' | 'check' | 'review'>(null);
@@ -85,18 +85,38 @@ export default function AIMode() {
     });
   };
 
+  const hourly = hourlyRateCents(settings.monthlyIncomeCents, settings.hoursPerWeek);
+  const safe =
+    txs && recurring
+      ? safeToSpend({ today: t, txs, expectedIncomeCents: settings.monthlyIncomeCents, savingsGoalCents: settings.savingsGoalCents, recurring })
+      : null;
+  const month = txs ? totals(txs, monthStart, endOfMonth(t)) : null;
+
   const runCheck = () => {
     setError(null);
     const cents = parseAmount(price);
     if (!item.trim() || !cents || cents <= 0) {
-      setError('Enter what you want to buy and its price.');
+      setError('Write what you want to buy and its price.');
       return;
     }
     if (!requirePro('ai_check')) return;
     withConsent(async () => {
       setBusy('check');
       try {
-        const result = await checkPurchase({ item: item.trim(), price: fromCents(cents), currency });
+        // Only numbers about this month go along, so the answer fits the person's own budget.
+        const budget =
+          safe && month && safe.status !== 'unset'
+            ? {
+                safe_to_spend: fromCents(Math.max(0, safe.amount)),
+                days_left: safe.daysLeft,
+                monthly_income: safe.income > 0 ? fromCents(safe.income) : null,
+                hourly_pay: hourly ? fromCents(hourly) : null,
+                savings_goal: settings.savingsGoalCents > 0 ? fromCents(settings.savingsGoalCents) : null,
+                saving_for: settings.savingFor.trim().slice(0, 60) || null,
+                wants_so_far: fromCents(month.want),
+              }
+            : null;
+        const result = await checkPurchase({ item: item.trim(), price: fromCents(cents), currency, budget });
         setCheck({ ...result, priceCents: cents });
       } catch (e) {
         fail(e, 'ai_check');
@@ -122,6 +142,7 @@ export default function AIMode() {
           need: fromCents(cur.need),
           want: fromCents(cur.want),
           savings_goal: fromCents(settings.savingsGoalCents),
+          saving_for: settings.savingFor.trim().slice(0, 60) || null,
           previous: prev.spent > 0 ? { need: fromCents(prev.need), want: fromCents(prev.want) } : null,
           categories: categoryBreakdown(txs, monthStart, endOfMonth(t)).map((b) => ({
             category: b.category.replace(/^custom:/, ''),
@@ -138,144 +159,137 @@ export default function AIMode() {
     });
   };
 
-  const hourly = hourlyRateCents(settings.monthlyIncomeCents, settings.hoursPerWeek);
-  const safe =
-    txs && recurring
-      ? safeToSpend({ today: t, txs, expectedIncomeCents: settings.monthlyIncomeCents, savingsGoalCents: settings.savingsGoalCents, recurring })
-      : null;
   const hours = check ? hoursOfWork(check.priceCents, hourly) : null;
+  const shareOfSafe = check && safe && safe.amount > 0 ? Math.round((check.priceCents / safe.amount) * 100) : null;
+  const monthName = parseISODate(t).toLocaleDateString(undefined, { month: 'long' });
 
   return (
-    <Screen>
-      <HeroCard>
-        <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <ReceiptScan width={118} onHero />
-          {isPro ? (
-            <ProBadge onHero />
-          ) : (
-            <Pill
-              icon="sparkles"
-              label={trialLeft > 0 ? `${trialLeft} free ${trialLeft === 1 ? 'scan' : 'scans'} left` : 'Free scans used'}
-              color={c.onHero}
-              bg="rgba(246,244,238,0.14)"
-            />
-          )}
-        </Row>
-        <View style={{ gap: 4 }}>
-          <AppText variant="display" color={c.onHero} style={{ fontSize: 26, lineHeight: 32 }}>
-            Scan a receipt or bill
-          </AppText>
-          <AppText color={c.onHeroMuted}>AI reads every item, total and date, and sorts each line into needs and wants.</AppText>
-        </View>
-        <Button title="Take photo" icon="camera" kind="hero" onPress={() => scan('camera')} />
-        <Button title="Choose from photos" icon="images-outline" kind="heroGhost" onPress={() => scan('library')} />
-      </HeroCard>
+    <Screen topInset>
+      <View style={{ gap: 8 }}>
+        <PageTitle
+          title="AI mode"
+          right={
+            <AppText variant="note" muted style={{ fontSize: 19, marginBottom: 8 }}>
+              {isPro ? 'pro' : trialLeft > 0 ? `${trialLeft} free ${trialLeft === 1 ? 'scan' : 'scans'} left` : 'free scans used'}
+            </AppText>
+          }
+        />
+        <AppText muted style={{ fontSize: 15, lineHeight: 22 }}>
+          Snap a receipt or a bill. The AI types in every item and sorts it into needs and wants.
+        </AppText>
+      </View>
+
+      <Card seed="viewfinder" style={{ padding: 0, alignItems: 'center' }}>
+        <ViewfinderSketch width={326} />
+        <AppText variant="note" muted style={{ position: 'absolute', left: 70, bottom: 6, fontSize: 20, transform: [{ rotate: '-2deg' }] }}>
+          lay it flat, fill the frame
+        </AppText>
+      </Card>
+
+      <View style={{ gap: 12 }}>
+        <Button title="Take photo" icon="camera-outline" onPress={() => scan('camera')} />
+        <Button title="Choose from photos" kind="secondary" onPress={() => scan('library')} />
+      </View>
 
       {error && <Banner tone="danger">{error}</Banner>}
 
-      <Card>
+      <Card seed="buy-check" style={{ gap: 16, marginTop: space.sm }}>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Row style={{ gap: space.md }}>
-            <IconCircle icon="bag-handle-outline" bg={c.wantSoft} color={c.wantInk} />
-            <AppText variant="title">Should I buy this?</AppText>
-          </Row>
-          {!isPro && <ProBadge />}
+          <AppText variant="title">Should I buy this?</AppText>
+          {!isPro && <ProTag />}
         </Row>
-        <AppText muted>Pause before a purchase. See it in hours of work and get an honest second opinion.</AppText>
-        <Field icon="pricetag-outline" value={item} onChangeText={setItem} placeholder="What is it? e.g. wireless earbuds" maxLength={120} />
-        <Field icon="cash-outline" value={price} onChangeText={setPrice} placeholder={`Price (${currency})`} keyboardType="decimal-pad" />
-        <Button title="Check it" icon="help-circle-outline" onPress={runCheck} loading={busy === 'check'} />
+        <View style={{ flexDirection: 'row', gap: 18 }}>
+          <View style={{ flex: 1 }}>
+            <Field label="What is it?" value={item} onChangeText={setItem} placeholder="e.g. wireless earbuds" maxLength={120} />
+          </View>
+          <View style={{ width: 100 }}>
+            <Field label="Price" value={price} onChangeText={setPrice} placeholder="0.00" keyboardType="decimal-pad" />
+          </View>
+        </View>
+        <Button title="Check it" onPress={runCheck} loading={busy === 'check'} />
         {busy === 'check' && <ThinkingNote />}
         {check && (
-          <View style={{ gap: space.md }}>
-            <Row style={{ flexWrap: 'wrap' }}>
-              <Verdict verdict={check.verdict} />
-              <Pill
-                label={check.necessity === 'need' ? 'Need' : 'Want'}
-                icon={check.necessity === 'need' ? 'shield-checkmark' : 'star'}
-                color={check.necessity === 'need' ? c.needInk : c.wantInk}
-                bg={check.necessity === 'need' ? c.needSoft : c.wantSoft}
-              />
+          <View style={{ gap: 14 }}>
+            <SketchRule seed={33} opacity={0.3} />
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Pill label={check.necessity === 'need' ? 'A need' : 'A want'} mark={check.necessity === 'need' ? <NeedMark size={10} /> : <WantMark size={10} />} />
+              <Stamp label={VERDICT[check.verdict]} />
             </Row>
-            <Row style={{ gap: space.md }}>
-              {hours !== null && <Metric value={`${hours.toFixed(1)} h`} label="of your work" />}
-              {safe && safe.amount > 0 && <Metric value={`${Math.round((check.priceCents / safe.amount) * 100)}%`} label="of safe-to-spend" />}
-            </Row>
-            <AppText>{check.reason}</AppText>
-            {check.cheaper_alternative && (
-              <Row style={{ alignItems: 'flex-start', gap: space.md }}>
-                <Ionicons name="leaf" size={18} color={c.need} style={{ marginTop: 2 }} />
-                <AppText weight="semibold" style={{ flex: 1 }}>
-                  {check.cheaper_alternative}
-                </AppText>
+            {(hours !== null || shareOfSafe !== null) && (
+              <Row style={{ gap: 14, alignItems: 'flex-start' }}>
+                {hours !== null && <Metric value={`${hours < 10 ? hours.toFixed(1) : Math.round(hours)} h`} label="of your work" />}
+                {shareOfSafe !== null && <Metric value={`${shareOfSafe}%`} label="of what’s safe to spend" />}
               </Row>
             )}
-            {check.questions.slice(0, 3).map((q) => (
-              <Row key={q} style={{ alignItems: 'flex-start', gap: space.sm }}>
-                <AppText muted>•</AppText>
-                <AppText muted style={{ flex: 1 }}>
-                  {q}
-                </AppText>
-              </Row>
-            ))}
+            <AppText muted style={{ fontSize: 15, lineHeight: 22 }}>
+              {check.reason}
+              {check.cheaper_alternative ? <AppText style={{ fontSize: 15 }}> Cheaper: {check.cheaper_alternative}</AppText> : null}
+            </AppText>
+            {check.questions.length > 0 && (
+              <AppText variant="note" muted style={{ fontSize: 20, lineHeight: 23 }}>
+                {check.questions.slice(0, 3).join('\n')}
+              </AppText>
+            )}
           </View>
         )}
       </Card>
 
-      <Card>
+      <Card seed="review" style={{ gap: 14 }}>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Row style={{ gap: space.md }}>
-            <IconCircle icon="sparkles-outline" />
-            <AppText variant="title">Monthly review</AppText>
-          </Row>
-          {!isPro && <ProBadge />}
+          <View style={{ flex: 1 }}>
+            <AppText weight="semibold">{monthName} review</AppText>
+            <AppText variant="caption" muted>
+              A short read on your month, with three tips
+            </AppText>
+          </View>
+          {!isPro && <ProTag />}
         </Row>
-        <AppText muted>A short, plain-language look at this month’s needs and wants, with three tips.</AppText>
         {review && (
-          <View style={{ gap: space.md }}>
+          <View style={{ gap: 12 }}>
             <Row style={{ gap: space.lg }}>
-              <ScoreRing score={review.safety_score} />
-              <View style={{ flex: 1, gap: 4 }}>
-                <AppText variant="label" muted>
-                  Safety score
+              <SketchCircle size={64} seed={57}>
+                <AppText variant="number" style={tabular}>
+                  {Math.max(0, Math.min(100, Math.round(review.safety_score)))}
                 </AppText>
-                <AppText variant="title">{review.headline}</AppText>
+              </SketchCircle>
+              <View style={{ flex: 1, gap: 2 }}>
+                <AppText variant="note" muted style={{ fontSize: 18 }}>
+                  safety score
+                </AppText>
+                <AppText variant="title" style={{ fontSize: 24, lineHeight: 28 }}>
+                  {review.headline}
+                </AppText>
               </View>
             </Row>
-            <AppText>{review.summary}</AppText>
-            {review.tips.map((tip) => (
+            <AppText style={{ fontSize: 15, lineHeight: 22 }}>{review.summary}</AppText>
+            {review.tips.map((tip, i) => (
               <Row key={tip} style={{ alignItems: 'flex-start', gap: space.md }}>
-                <Ionicons name="leaf" size={16} color={c.need} style={{ marginTop: 3 }} />
-                <AppText style={{ flex: 1 }}>{tip}</AppText>
+                <AppText variant="number" style={{ fontSize: 20, lineHeight: 24, color: colors.pencil }}>
+                  {i + 1}
+                </AppText>
+                <AppText style={{ flex: 1, fontSize: 15, lineHeight: 22 }}>{tip}</AppText>
               </Row>
             ))}
           </View>
         )}
-        <Button
-          title={review ? 'Refresh review' : 'Get my review'}
-          icon="sparkles-outline"
-          kind="secondary"
-          onPress={runReview}
-          loading={busy === 'review'}
-        />
+        <Button title={review ? 'Read it again' : 'Get my review'} kind="secondary" onPress={runReview} loading={busy === 'review'} />
         {busy === 'review' && <ThinkingNote />}
       </Card>
 
       {scans && scans.length > 0 && (
-        <>
+        <View>
           <SectionTitle>Recent scans</SectionTitle>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md, paddingBottom: 6 }}>
-            {scans.map((s) => (
-              <ScanCard
-                key={s.id}
-                uri={s.image_uri}
-                title={s.merchant ?? 'Receipt'}
-                subtitle={`${formatMoney(s.amount_cents, s.currency)} · ${formatDay(s.occurred_on, { month: 'short', day: 'numeric' })}`}
-                onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: s.id } })}
-              />
-            ))}
-          </ScrollView>
-        </>
+          {scans.map((s, i) => (
+            <TxRow
+              key={s.id}
+              tx={s}
+              custom={settings.customCategories}
+              showDate
+              last={i === scans.length - 1}
+              onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: s.id } })}
+            />
+          ))}
+        </View>
       )}
 
       <ConsentSheet
@@ -292,7 +306,7 @@ export default function AIMode() {
 
       <Modal visible={busy === 'scan'} transparent animationType="fade">
         <View style={styles.busyBackdrop}>
-          <View style={[styles.busyCard, { backgroundColor: c.surface }]}>
+          <Card seed="reading" style={styles.busyCard}>
             <Pulse>
               <LogoMark size={72} />
             </Pulse>
@@ -300,9 +314,9 @@ export default function AIMode() {
               Reading your receipt…
             </AppText>
             <AppText muted center>
-              The AI checks every line for totals and needs vs wants. This can take up to a minute.
+              The AI checks every line for totals, and needs vs wants. This can take up to a minute.
             </AppText>
-          </View>
+          </Card>
         </View>
       </Modal>
     </Screen>
@@ -311,91 +325,22 @@ export default function AIMode() {
 
 function ThinkingNote() {
   return (
-    <AppText variant="caption" muted center>
-      Thinking it through carefully. This can take up to a minute.
+    <AppText variant="note" muted center style={{ fontSize: 19 }}>
+      thinking it through… this can take up to a minute
     </AppText>
   );
 }
 
-function Verdict({ verdict }: { verdict: CheckResult['verdict'] }) {
-  const c = useColors();
-  const v = {
-    go: { label: 'Reasonable buy', icon: 'checkmark-circle' as const, fg: c.needInk, bg: c.needSoft },
-    wait: { label: 'Sleep on it', icon: 'moon' as const, fg: c.wantInk, bg: c.wantSoft },
-    skip: { label: 'Probably skip', icon: 'close-circle' as const, fg: c.danger, bg: c.dangerSoft },
-  }[verdict];
-  return <Pill icon={v.icon} label={v.label} color={v.fg} bg={v.bg} />;
-}
-
 function Metric({ value, label }: { value: string; label: string }) {
-  const c = useColors();
   return (
-    <View style={[styles.metric, { backgroundColor: c.surfaceAlt }]}>
-      <AppText variant="title" weight="extrabold">
+    <View style={{ flex: 1 }}>
+      <AppText variant="number" style={tabular}>
         {value}
       </AppText>
-      <AppText variant="caption" muted>
+      <AppText variant="caption" muted style={{ marginTop: 2 }}>
         {label}
       </AppText>
     </View>
-  );
-}
-
-/** Safety score as a ring: evergreen when strong, amber in the middle, red when low. */
-function ScoreRing({ score, size = 76 }: { score: number; size?: number }) {
-  const c = useColors();
-  const value = Math.max(0, Math.min(100, Math.round(score)));
-  const stroke = 8;
-  const r = (size - stroke) / 2;
-  const circ = 2 * Math.PI * r;
-  const color = value >= 60 ? c.need : value >= 40 ? c.want : c.danger;
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`Safety score ${value} out of 100`}>
-      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke={c.surfaceAlt} strokeWidth={stroke} fill="none" />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={color}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${(circ * value) / 100} ${circ}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-      <AppText style={{ fontFamily: fonts.extrabold, fontSize: 22, lineHeight: 26 }}>{value}</AppText>
-    </View>
-  );
-}
-
-function ScanCard({ uri, title, subtitle, onPress }: { uri: string | null; title: string; subtitle: string; onPress: () => void }) {
-  const c = useColors();
-  const dark = useIsDark();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.scanCard,
-        { backgroundColor: c.surface, opacity: pressed ? 0.8 : 1 },
-        dark ? { borderWidth: StyleSheet.hairlineWidth, borderColor: c.border } : elevation(false),
-      ]}>
-      {uri ? (
-        <Image source={{ uri }} style={styles.thumb} contentFit="cover" />
-      ) : (
-        <View style={[styles.thumb, { backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' }]}>
-          <Ionicons name="receipt-outline" size={26} color={c.inkMuted} />
-        </View>
-      )}
-      <AppText weight="semibold" numberOfLines={1}>
-        {title}
-      </AppText>
-      <AppText variant="caption" muted>
-        {subtitle}
-      </AppText>
-    </Pressable>
   );
 }
 
@@ -406,8 +351,8 @@ function Pulse({ children }: { children: ReactNode }) {
     const native = Platform.OS !== 'web';
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(scale, { toValue: 1.1, duration: 700, useNativeDriver: native }),
-        Animated.timing(scale, { toValue: 1, duration: 700, useNativeDriver: native }),
+        Animated.timing(scale, { toValue: 1.08, duration: 800, useNativeDriver: native }),
+        Animated.timing(scale, { toValue: 1, duration: 800, useNativeDriver: native }),
       ]),
     );
     loop.start();
@@ -417,9 +362,7 @@ function Pulse({ children }: { children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  metric: { flex: 1, borderRadius: radius.md, padding: space.md, gap: 2 },
-  scanCard: { width: 156, borderRadius: radius.md, padding: space.sm, gap: 4 },
-  thumb: { width: '100%', height: 112, borderRadius: radius.sm, marginBottom: 4 },
-  busyBackdrop: { flex: 1, backgroundColor: 'rgba(10,20,17,0.45)', alignItems: 'center', justifyContent: 'center', padding: space.xl },
-  busyCard: { borderRadius: radius.lg, padding: space.xl, alignItems: 'center', gap: space.md, width: '100%', maxWidth: 360 },
+  busyBackdrop: { flex: 1, backgroundColor: 'rgba(17,17,17,0.35)', alignItems: 'center', justifyContent: 'center', padding: space.xl },
+  busyCard: { padding: space.xl, alignItems: 'center', gap: space.md, width: '100%', maxWidth: 360 },
 });
+

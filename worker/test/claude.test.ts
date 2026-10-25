@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createClaude, MODEL } from '../src/ai/claude';
+import { checkPrompt, createClaude, MODEL } from '../src/ai/claude';
 
 type Final = Partial<{ stop_reason: string; parsed_output: unknown }> | Error;
 
@@ -83,5 +83,24 @@ describe('checkKey', () => {
     const rejected = new Anthropic.AuthenticationError(401, { type: 'error' }, 'invalid x-api-key', new Headers());
     expect(await withModels(async () => Promise.reject(rejected)).checkKey()).toBe('invalid');
     expect(await withModels(async () => Promise.reject(new Error('network'))).checkKey()).toBe('unreachable');
+  });
+});
+
+describe('checkPrompt', () => {
+  it('sends only the item and price when there is no budget', () => {
+    expect(checkPrompt({ item: 'Earbuds', price: 149, currency: 'USD' })).toBe('Item: Earbuds\nPrice: 149 USD');
+  });
+
+  it('adds the month’s budget as plain numbers', () => {
+    const text = checkPrompt({
+      item: 'Earbuds',
+      price: 149,
+      currency: 'USD',
+      budget: { safe_to_spend: 1988.56, days_left: 7, monthly_income: 5750, hourly_pay: 28.75, savings_goal: 800, saving_for: 'a car', wants_so_far: 522.42 },
+    });
+    expect(text).toContain('Safe to spend for the rest of the month: 1988.56, with 7 days left');
+    expect(text).toContain('Pay per hour of work: 28.75');
+    expect(text).toContain('Saving each month: 800 (for a car)');
+    expect(text).toContain('Already spent on wants this month: 522.42');
   });
 });

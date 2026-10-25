@@ -4,7 +4,7 @@ import { Animated, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, haptic, type IconName } from './ui';
-import { elevation, radius, useColors } from '@/theme/tokens';
+import { colors } from '@/theme/tokens';
 
 type ToastInput = { message: string; icon?: IconName; tone?: 'success' | 'info' };
 type ToastState = ToastInput & { id: number };
@@ -15,7 +15,6 @@ const useNative = Platform.OS !== 'web';
 
 /** A short confirmation that slides in at the top and leaves on its own. */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const c = useColors();
   const insets = useSafeAreaInsets();
   const [toast, setToast] = useState<ToastState | null>(null);
   const [anim] = useState(() => new Animated.Value(0));
@@ -47,16 +46,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           accessibilityRole="alert"
           style={[
             styles.toast,
-            elevation(false, 2),
             {
               top: insets.top + 8,
-              backgroundColor: c.ink,
+              backgroundColor: colors.ink,
               opacity: anim,
               transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
             },
           ]}>
-          <Ionicons name={toast.icon ?? 'checkmark-circle'} size={20} color={c.mint} />
-          <AppText weight="semibold" color={c.bg} style={{ flexShrink: 1 }}>
+          <Ionicons name={toast.icon ?? 'checkmark'} size={19} color={colors.onInk} />
+          <AppText weight="medium" color={colors.onInk} style={{ flexShrink: 1, fontSize: 15 }}>
             {toast.message}
           </AppText>
         </Animated.View>
@@ -80,6 +78,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 18,
     paddingVertical: 13,
-    borderRadius: radius.pill,
+    borderRadius: 2,
   },
 });

@@ -5,12 +5,11 @@ import { AppState, Platform, StyleSheet, View } from 'react-native';
 import { AppIcon } from './brand';
 import { AppText, Button } from './ui';
 import { useSettings } from '@/db/settings';
-import { space, useColors } from '@/theme/tokens';
+import { colors, space } from '@/theme/tokens';
 
 /** Optional Face ID / fingerprint / passcode lock. The app re-locks whenever it goes to the background. */
 export function LockGate({ children }: { children: ReactNode }) {
   const settings = useSettings();
-  const c = useColors();
   const enabled = !!settings?.appLock && Platform.OS !== 'web';
   const [locked, setLocked] = useState(true);
   const lockedRef = useRef(true);
@@ -50,15 +49,15 @@ export function LockGate({ children }: { children: ReactNode }) {
     <>
       {children}
       {enabled && locked && (
-        <View style={[StyleSheet.absoluteFill, styles.overlay, { backgroundColor: c.bg }]}>
+        <View style={[StyleSheet.absoluteFill, styles.overlay, { backgroundColor: colors.paper }]}>
           <AppIcon size={88} />
           <AppText variant="display" center>
             Xpense is locked
           </AppText>
           <AppText muted center>
-            Your money data stays private on this phone.
+            Unlock with Face ID, Touch ID or your passcode.
           </AppText>
-          <Button title="Unlock" icon="lock-open-outline" onPress={unlock} style={{ alignSelf: 'stretch', marginTop: space.md }} />
+          <Button title="Unlock" onPress={unlock} style={{ alignSelf: 'stretch', marginTop: space.md, maxWidth: 360 }} />
         </View>
       )}
     </>

@@ -22,14 +22,15 @@ const RULES: [RegExp, ExpenseCategory][] = [
   [/\b(amazon|target|ikea|mall|clothes|clothing|shoes|nike|adidas|zara|h&m|uniqlo|electronics|best buy|apple store)\b/, 'shopping'],
 ];
 
-export type Guess = { category: ExpenseCategory; necessity: Necessity };
+export type Guess = { category: ExpenseCategory; necessity: Necessity; /** The word that gave it away, e.g. "bus". */ matched: string };
 
 export function categorize(text: string): Guess | null {
   // iOS keyboards type curly apostrophes (Trader Joe’s); match them like straight ones.
   const t = text.toLowerCase().replace(/[’‘`]/g, "'");
   if (!t.trim()) return null;
   for (const [re, category] of RULES) {
-    if (re.test(t)) return { category, necessity: CATEGORY_INFO[category].necessity ?? 'want' };
+    const m = re.exec(t);
+    if (m) return { category, necessity: CATEGORY_INFO[category].necessity ?? 'want', matched: m[0] };
   }
   return null;
 }

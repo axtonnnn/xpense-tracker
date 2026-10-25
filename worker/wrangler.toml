@@ -7,8 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 [alias]
 "zod" = "./node_modules/zod"
 
-# The privacy policy, terms and support pages (docs/*.md) are bundled as text and served at
-# /privacy, /terms and /support — use those URLs in App Store Connect.
+# The website: the home page (/) and the privacy policy, terms and support pages (docs/*.md, bundled
+# as text and served at /privacy, /terms and /support — use those URLs in App Store Connect).
+# Fonts and screenshots for it are static files in ./public.
+[assets]
+directory = "./public"
+
 [[rules]]
 type = "Text"
 globs = ["**/*.md"]
@@ -20,8 +24,12 @@ OWNER_NAME = "REPLACE with your name or company"
 CONTACT_EMAIL = "REPLACE with your support email"
 GOVERNING_LAW = "REPLACE with your country or state, e.g. the State of California, USA"
 LAST_UPDATED = "REPLACE with the date you publish, e.g. 1 November 2026"
-# Optional: once the app is live, its App Store link adds a download button to the home page.
+# Optional: once the app is live, its store links add download buttons to the home page.
 APP_STORE_URL = ""
+PLAY_STORE_URL = ""
+
+# Accounts: your Supabase project URL (Project Settings → API). Sign-in tokens are checked against it.
+SUPABASE_URL = "REPLACE with your Supabase project URL, e.g. https://abcd1234.supabase.co"
 
 FREE_TRIAL_SCANS = "3"
 # Pro fair-use caps per calendar month. At max effort each scan costs ≈ $0.002–0.008,
@@ -35,7 +43,7 @@ PRO_MONTHLY_REVIEWS = "30"
 binding = "USAGE"
 id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
-# Burst protection: at most 10 AI requests per install per minute.
+# Burst protection: at most 10 AI requests per account per minute.
 [[ratelimits]]
 name = "BURST_LIMITER"
 namespace_id = "1001"
@@ -44,3 +52,4 @@ simple = { limit = 10, period = 60 }
 # Secrets (never commit these):
 #   npx wrangler secret put ANTHROPIC_API_KEY
 #   npx wrangler secret put REVENUECAT_SECRET_KEY
+#   npx wrangler secret put SUPABASE_SECRET_KEY      (Project Settings → API keys → secret key; used to delete accounts)

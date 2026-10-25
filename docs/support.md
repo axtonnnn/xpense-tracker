@@ -3,13 +3,21 @@
 
 Questions, problems or ideas? Email {{CONTACT_EMAIL}} and we'll get back to you, usually within two working days.
 
-If it's about AI scans or Xpense Pro, please include your **Support ID**. You'll find it at the bottom of **Settings → About** (tap the gear on the dashboard). It isn't linked to your name, and it lets us look up your install's usage.
+If it's about AI scans or Xpense Pro, please include your **Account ID**. You'll find it at the bottom of **Settings** (tap your initial on the dashboard, or **Settings** in the sidebar on iPad and Mac).
 
 ## Common questions
 
-### How do I get Xpense Pro back on a new phone?
+### How do I use Xpense on my iPad or Mac?
 
-Open **Settings → About → Restore purchases**, signed in with the same Apple ID (or Google account) you subscribed with. The Pro screen has the same button.
+Install Xpense from the App Store on that device and sign in the same way you did on your phone: with Apple, or with a code sent to the same email. Your entries, repeats and settings come across within a few seconds. Receipt photos stay on the device that took them.
+
+### How do I get Xpense Pro on a new device?
+
+Sign in to the same Xpense account and Pro is there. If it isn't, open **Settings → More → Restore purchases** while signed in to the same Apple ID (or Google account) you subscribed with. The Pro screen has the same button.
+
+### I didn't get the sign-in code
+
+Check your spam or junk folder, and that the address is spelled right. Codes can take a minute to arrive. After a minute you can ask for a new one; only the newest code works.
 
 ### How do I cancel my subscription?
 
@@ -19,13 +27,17 @@ On iPhone, open the **Settings** app, tap your name, then **Subscriptions → Xp
 
 Apple handles App Store refunds at [reportaproblem.apple.com](https://reportaproblem.apple.com). Google handles Google Play refunds through your Google Play order history.
 
-### Where is my data? Can you see it?
+### Where is my data? Who can see it?
 
-Your entries and receipt photos are stored only on your phone, and we can't see them. On iPhone they're part of your iCloud or computer backup, so they come back when you restore a backup or move to a new iPhone. To erase everything, use **Settings → Your data → Delete all data**. The [Privacy Policy](privacy-policy.md) has the details.
+Your entries are kept on your devices and in your private Xpense account, so they sync between your devices. Only your account can read them. Receipt photos stay on the device that took them. The [Privacy Policy](privacy-policy.md) has the details.
+
+### How do I delete my account?
+
+Open **Settings → Delete account** in the app. It deletes your account and everything in it, on every device. If you subscribe to Pro, cancel it in your App Store or Google Play account too.
 
 ### Is my data used to train AI?
 
-No. Receipt photos and questions are sent to the AI only to answer that request, and only after you allow AI features. We don't keep them, and our AI provider, Anthropic, doesn't train its models on them. You can switch AI off in **Settings → Privacy & safety**.
+No. Receipt photos and questions are sent to the AI only to answer that request, and only after you allow AI features. We don't keep them, and our AI provider, Anthropic, doesn't train its models on them. You can switch AI off in **Settings → On this device**.
 
 ### Why does reading a receipt take up to a minute?
 
@@ -37,8 +49,8 @@ Everything is editable before you save, including each item's need or want. You 
 
 ### How many AI scans do I get?
 
-Every install gets {{FREE_TRIAL_SCANS}} free scans. Xpense Pro includes up to {{PRO_MONTHLY_SCANS}} scans, {{PRO_MONTHLY_CHECKS}} "Should I buy this?" checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month.
+Every account gets {{FREE_TRIAL_SCANS}} free scans. Xpense Pro includes up to {{PRO_MONTHLY_SCANS}} scans, {{PRO_MONTHLY_CHECKS}} "Should I buy this?" checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month.
 
 ### Can I lock the app?
 
-Yes. Turn on **Settings → Privacy & safety → Lock with Face ID or passcode**.
+Yes. Turn on **Settings → On this device → Lock with Face ID or passcode**.

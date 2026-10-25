@@ -1,15 +1,18 @@
-// Xpense AI Worker: keeps the Anthropic key off the phone, checks Pro/trial access, and returns
-// schema-validated JSON. It stores no images or results — only small usage counters in KV.
+// Xpense AI Worker: keeps the Anthropic key off the phone, checks who is asking (their Xpense account)
+// and whether they have Pro or trial access, and returns schema-validated JSON. It stores no images or
+// results — only small usage counters in KV. It also serves the website and deletes accounts on request.
 import type { z } from 'zod';
 
 import { CheckRequestSchema, ReviewRequestSchema, ScanRequestSchema } from '../../shared/schemas';
 import { AIError, createClaude, type AIProvider } from './ai/claude';
-import { checkAccess, checkRevenueCatKey, recordUsage, type Feature } from './entitlement';
+import { checkSupabaseKey, deleteSupabaseUser, userFrom, verifySupabaseToken, type Verify } from './auth';
+import { checkAccess, checkRevenueCatKey, forgetAccount, recordUsage, type Feature } from './entitlement';
 import type { Env } from './env';
 import { missingSettings, pageResponse } from './pages';
 
 export type Deps = {
   ai: (env: Env) => AIProvider;
+  verify?: Verify;
   fetchImpl?: typeof fetch;
   now?: () => Date;
   keepaliveMs?: number;
@@ -17,12 +20,11 @@ export type Deps = {
 
 const MAX_BODY_BYTES = 4_000_000;
 const KEEPALIVE_MS = 10_000;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Install-Id',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 type Route = {
@@ -30,6 +32,8 @@ type Route = {
   schema: z.ZodType;
   run: (ai: AIProvider, body: never) => Promise<unknown>;
 };
+
+const ACCOUNT_DELETE = '/v1/account/delete';
 
 const ROUTES: Record<string, Route> = {
   '/v1/scan': { feature: 'scan', schema: ScanRequestSchema, run: (ai, body) => ai.scanReceipt(body) },
@@ -86,6 +90,7 @@ function slowJson(work: () => Promise<unknown>, keepaliveMs: number): Response {
 export function createHandler(deps: Deps) {
   const fetchImpl = deps.fetchImpl ?? fetch.bind(globalThis);
   const now = deps.now ?? (() => new Date());
+  const verify = deps.verify ?? verifySupabaseToken;
 
   return async function handle(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -98,19 +103,22 @@ export function createHandler(deps: Deps) {
         configured: {
           anthropic_key: !!env.ANTHROPIC_API_KEY,
           revenuecat_key: !!env.REVENUECAT_SECRET_KEY,
+          supabase_url: /^https:\/\//.test(env.SUPABASE_URL ?? ''),
+          supabase_secret_key: !!env.SUPABASE_SECRET_KEY,
           missing_page_settings: missingSettings(env),
         },
       };
       if (url.searchParams.get('deep') !== '1') return json(health);
-      // ?deep=1 also asks Anthropic and RevenueCat whether they accept the keys. Both checks are free.
+      // ?deep=1 also asks Anthropic, RevenueCat and Supabase whether they accept the keys. All checks are free.
       if (env.BURST_LIMITER && !(await env.BURST_LIMITER.limit({ key: 'health' })).success) {
         return error(429, 'slow_down', 'Too many checks. Please wait a minute and try again.');
       }
-      const [anthropic, revenuecat] = await Promise.all([
+      const [anthropic, revenuecat, supabase] = await Promise.all([
         env.ANTHROPIC_API_KEY ? deps.ai(env).checkKey() : 'missing',
         checkRevenueCatKey(env, fetchImpl),
+        checkSupabaseKey(env, fetchImpl),
       ]);
-      return json({ ...health, keys: { anthropic, revenuecat } });
+      return json({ ...health, keys: { anthropic, revenuecat, supabase } });
     }
     if (request.method === 'GET' || request.method === 'HEAD') {
       const page = pageResponse(pathname, request.method, env);
@@ -118,11 +126,21 @@ export function createHandler(deps: Deps) {
     }
 
     const route = ROUTES[pathname];
-    if (!route) return error(404, 'not_found', 'Not found.');
+    if (!route && pathname !== ACCOUNT_DELETE) return error(404, 'not_found', 'Not found.');
     if (request.method !== 'POST') return error(405, 'method_not_allowed', 'Use POST.');
 
-    const installId = request.headers.get('X-Install-Id') ?? '';
-    if (!UUID.test(installId)) return error(400, 'bad_install_id', 'Missing or invalid install ID.');
+    const userId = await userFrom(request, env, verify);
+    if (!userId) return error(401, 'signed_out', 'Please sign in again to use the AI.');
+
+    if (pathname === ACCOUNT_DELETE) {
+      // Required by App Review 5.1.1(v): people can delete their account from inside the app.
+      if (!(await deleteSupabaseUser(env, userId, fetchImpl))) {
+        return error(503, 'delete_failed', 'Couldn’t delete your account right now. Please try again, or contact support.');
+      }
+      await forgetAccount(env, userId, fetchImpl);
+      return json({ deleted: true });
+    }
+    if (!route) return error(404, 'not_found', 'Not found.');
 
     if (Number(request.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) {
       return error(413, 'too_large', 'That photo is too large. Please try again.');
@@ -140,12 +158,12 @@ export function createHandler(deps: Deps) {
     if (!parsed.success) return error(400, 'bad_request', 'The request was incomplete.');
 
     if (env.BURST_LIMITER) {
-      const { success } = await env.BURST_LIMITER.limit({ key: installId });
+      const { success } = await env.BURST_LIMITER.limit({ key: userId });
       if (!success) return error(429, 'slow_down', 'Too many requests. Please wait a minute and try again.');
     }
 
     const when = now();
-    const access = await checkAccess(env, installId, route.feature, { fetchImpl, now: when });
+    const access = await checkAccess(env, userId, route.feature, { fetchImpl, now: when });
     if (!access.ok) return error(access.status, access.code, access.message);
 
     return slowJson(async () => {
@@ -157,7 +175,7 @@ export function createHandler(deps: Deps) {
         throw e;
       }
       // Only successful answers count against the trial or the monthly cap.
-      const usage = await recordUsage(env, installId, route.feature, access, when);
+      const usage = await recordUsage(env, userId, route.feature, access, when);
       return route.feature === 'scan' ? { receipt: result, trial_remaining: usage.trialRemaining } : { result };
     }, deps.keepaliveMs ?? KEEPALIVE_MS);
   };

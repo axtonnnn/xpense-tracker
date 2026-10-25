@@ -2,22 +2,25 @@ import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Linking, Platform, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { ActivityIndicator, Linking, Platform, Text, View } from 'react-native';
 
+import { SketchCircle } from '@/components/sketch';
 import { useToast } from '@/components/Toast';
-import { AppText, Button, Card, Chip, Divider, Field, HeroCard, ListRow, ProBadge, Row, Screen, Toggle } from '@/components/ui';
+import { AppText, Button, Card, Chip, Divider, Field, Label, ListRow, Row, Screen, Toggle } from '@/components/ui';
 import { setSettings, useSettings, type Settings } from '@/db/settings';
+import { useSync } from '@/db/SyncProvider';
 import { allTransactions, deleteAllData } from '@/db/transactions';
+import { ApiError, deleteAccountOnServer } from '@/lib/api';
+import { useAuth, useUser } from '@/lib/auth';
 import { PRIVACY_URL, PRO_MONTHLY_SCANS, SUPPORT_URL, TERMS_URL } from '@/lib/config';
 import { confirm, notify } from '@/lib/confirm';
 import { today } from '@/lib/dates';
 import { shareCSV } from '@/lib/export';
-import { getInstallId } from '@/lib/install-id';
 import { centsToInput, CURRENCIES, parseAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { loadSampleData } from '@/lib/sample-data';
-import { space, useColors } from '@/theme/tokens';
+import { colors, fonts, space } from '@/theme/tokens';
 
 export default function SettingsScreen() {
   const settings = useSettings();
@@ -25,23 +28,36 @@ export default function SettingsScreen() {
   return <SettingsForm settings={settings} />;
 }
 
+function syncLine(status: ReturnType<typeof useSync>['status'], at: Date | null): string {
+  if (status === 'local') return 'Preview account: nothing leaves this device';
+  if (status === 'syncing') return 'Syncing…';
+  if (status === 'offline') return 'Offline: changes will sync when you’re back online';
+  if (!at) return 'Synced';
+  const mins = Math.round((Date.now() - at.getTime()) / 60000);
+  return mins < 1 ? 'Synced just now' : `Synced ${mins} min ago`;
+}
+
 function SettingsForm({ settings }: { settings: Settings }) {
   const db = useSQLiteContext();
-  const c = useColors();
   const toast = useToast();
   const pro = usePro();
   const requirePro = useRequirePro();
+  const user = useUser();
+  const { signOut } = useAuth();
+  const sync = useSync();
+  const [name, setName] = useState(settings.name || user.name || '');
+  const [savingFor, setSavingFor] = useState(settings.savingFor);
   const [currency, setCurrency] = useState(settings.currency);
   const [otherCurrency, setOtherCurrency] = useState(!CURRENCIES.includes(settings.currency));
   const [income, setIncome] = useState(settings.monthlyIncomeCents ? centsToInput(settings.monthlyIncomeCents) : '');
   const [goal, setGoal] = useState(settings.savingsGoalCents ? centsToInput(settings.savingsGoalCents) : '');
   const [hours, setHours] = useState(String(settings.hoursPerWeek));
   const [busy, setBusy] = useState<string | null>(null);
-  const [supportId, setSupportId] = useState('');
 
-  useEffect(() => {
-    getInstallId().then(setSupportId, () => setSupportId(''));
-  }, []);
+  const saveYou = async () => {
+    await setSettings(db, { name: name.trim().slice(0, 40), saving_for: savingFor.trim().slice(0, 60) });
+    toast({ message: 'Saved' });
+  };
 
   const saveMoney = async () => {
     const code = currency.trim().toUpperCase();
@@ -63,7 +79,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
     if (on) {
       const [hasHw, enrolled] = await Promise.all([LocalAuthentication.hasHardwareAsync(), LocalAuthentication.isEnrolledAsync()]);
       if (!hasHw || !enrolled) {
-        notify('Set up Face ID or a passcode first', 'Your phone needs Face ID, Touch ID, fingerprint or a passcode to lock Xpense.');
+        notify('Set up Face ID or a passcode first', 'Your device needs Face ID, Touch ID, a fingerprint or a passcode to lock Xpense.');
         return;
       }
       const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Turn on app lock' });
@@ -84,24 +100,13 @@ function SettingsForm({ settings }: { settings: Settings }) {
     }
   };
 
-  const wipe = async () => {
-    const ok = await confirm(
-      'Delete all data?',
-      'Every transaction, receipt photo, repeating item and setting on this phone will be erased. Your Pro subscription is not affected.',
-      'Delete everything',
-    );
-    if (!ok) return;
-    await deleteAllData(db);
-    router.replace('/onboarding');
-  };
-
   const restore = async () => {
     setBusy('restore');
     try {
       const active = await pro.restore();
       notify(
         active ? 'Pro restored' : 'No subscription found',
-        active ? 'Welcome back to Xpense Pro.' : 'We couldn’t find an active Pro subscription for this Apple ID / Google account.',
+        active ? 'Welcome back to Xpense Pro.' : 'We couldn’t find an active Pro subscription for this Apple ID or Google account.',
       );
     } catch (e) {
       notify('Restore failed', e instanceof Error ? e.message : 'Please try again.');
@@ -110,42 +115,112 @@ function SettingsForm({ settings }: { settings: Settings }) {
     }
   };
 
-  const toggle = (value: boolean, onChange: (v: boolean) => void, label: string) => (
-    <Toggle value={value} onValueChange={onChange} label={label} />
-  );
+  const doSignOut = async () => {
+    setBusy('signout');
+    try {
+      await sync.syncNow();
+      const left = await sync.pending();
+      if (
+        left > 0 &&
+        !(await confirm(
+          'Some changes haven’t synced',
+          `${left} ${left === 1 ? 'change hasn’t' : 'changes haven’t'} reached your account yet. They stay on this device and sync next time you sign in here.`,
+          'Sign out anyway',
+        ))
+      ) {
+        return;
+      }
+      await signOut();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const deleteAccount = async () => {
+    const ok = await confirm(
+      'Delete your account?',
+      'This deletes your account and everything in it from all your devices: entries, receipts, repeats and settings. It can’t be undone. If you subscribe to Pro, also cancel it in your App Store or Google Play account.',
+      'Delete account',
+    );
+    if (!ok) return;
+    setBusy('delete');
+    try {
+      if (user.provider !== 'preview') await deleteAccountOnServer();
+      await deleteAllData(db);
+      await signOut();
+    } catch (e) {
+      notify('Couldn’t delete your account', e instanceof ApiError ? e.message : 'Please check your connection and try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggle = (value: boolean, onChange: (v: boolean) => void, label: string) => <Toggle value={value} onValueChange={onChange} label={label} />;
+  const shownName = settings.name || user.name || user.email?.split('@')[0] || 'You';
 
   return (
     <Screen>
-      {pro.isPro ? (
-        <Card>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <AppText variant="title">Xpense Pro</AppText>
-            <ProBadge label="ACTIVE" />
+      <Section title="Account">
+        <Card seed="account" style={{ gap: 14 }}>
+          <Row style={{ gap: 14 }}>
+            <SketchCircle size={48} seed={83}>
+              <Text style={{ fontFamily: fonts.serif, fontSize: 26, color: colors.ink }}>{shownName.slice(0, 1).toUpperCase()}</Text>
+            </SketchCircle>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <AppText weight="semibold" numberOfLines={1}>
+                {shownName}
+              </AppText>
+              <AppText variant="caption" faint numberOfLines={1}>
+                {user.provider === 'apple' ? 'Signed in with Apple' : user.provider === 'email' ? user.email : 'Preview account'}
+              </AppText>
+            </View>
           </Row>
-          <AppText muted>Thank you! AI scanning, buy checks, monthly reviews and long-range charts are unlocked.</AppText>
-          <Button title="Manage subscription" kind="secondary" icon="card-outline" onPress={() => pro.manage()} />
+          <AppText variant="caption" muted>
+            {syncLine(sync.status, sync.lastSyncedAt)}
+          </AppText>
+          <Row style={{ gap: 10 }}>
+            {sync.status !== 'local' && (
+              <Button title="Sync now" kind="secondary" onPress={() => void sync.syncNow()} loading={sync.status === 'syncing'} style={{ flex: 1, minHeight: 44 }} />
+            )}
+            <Button title="Sign out" kind="secondary" onPress={doSignOut} loading={busy === 'signout'} style={{ flex: 1, minHeight: 44 }} />
+          </Row>
         </Card>
-      ) : (
-        <HeroCard>
-          <Row>
-            <ProBadge onHero />
-          </Row>
-          <AppText variant="title" color={c.onHero}>
-            Unlock the full AI toolkit
-          </AppText>
-          <AppText color={c.onHeroMuted}>
-            Up to {PRO_MONTHLY_SCANS} AI receipt scans a month, “Should I buy this?”, monthly reviews, yearly trends and CSV export.
-          </AppText>
-          <Button title="See Pro plans" icon="sparkles" kind="hero" onPress={() => router.push('/paywall')} />
-        </HeroCard>
-      )}
+      </Section>
+
+      <Section title="Xpense Pro">
+        <Card seed="pro">
+          {pro.isPro ? (
+            <>
+              <AppText variant="title">Thank you</AppText>
+              <AppText muted>AI scanning, buy checks, monthly reviews and long-range charts are unlocked on all your devices.</AppText>
+              <Button title="Manage subscription" kind="secondary" onPress={() => pro.manage()} />
+            </>
+          ) : (
+            <>
+              <AppText variant="title">The full AI toolkit</AppText>
+              <AppText muted>
+                Up to {PRO_MONTHLY_SCANS} receipt scans a month, “Should I buy this?” against your budget, monthly reviews, yearly trends and CSV export.
+              </AppText>
+              <Button title="See Pro plans" onPress={() => router.push('/paywall')} />
+            </>
+          )}
+        </Card>
+      </Section>
+
+      <Section title="About you">
+        <Card seed="you">
+          <Field label="First name" value={name} onChangeText={setName} maxLength={40} placeholder="What should we call you?" />
+          <Field label="Saving up for" value={savingFor} onChangeText={setSavingFor} maxLength={60} placeholder="e.g. a car, moving out" />
+          <Button title="Save" kind="secondary" onPress={saveYou} />
+        </Card>
+      </Section>
 
       <Section title="Your money">
-        <Card>
-          <AppText variant="caption" weight="semibold" muted>
+        <Card seed="money">
+          <AppText variant="caption" muted>
             Currency
           </AppText>
-          <Row style={{ flexWrap: 'wrap' }}>
+          <Row style={{ flexWrap: 'wrap', gap: 8 }}>
             {CURRENCIES.map((code) => (
               <Chip
                 key={code}
@@ -159,7 +234,6 @@ function SettingsForm({ settings }: { settings: Settings }) {
             ))}
             <Chip
               label="Other"
-              icon="globe-outline"
               selected={otherCurrency}
               onPress={() => {
                 if (!otherCurrency) setCurrency('');
@@ -175,46 +249,33 @@ function SettingsForm({ settings }: { settings: Settings }) {
               autoCorrect={false}
               maxLength={3}
               placeholder="3-letter code, e.g. CHF"
-              icon="globe-outline"
               accessibilityLabel="Currency code"
             />
           )}
+          {currency.trim().toUpperCase() !== settings.currency && (
+            <AppText variant="note" muted style={{ fontSize: 19 }}>
+              entries you already saved keep their own currency
+            </AppText>
+          )}
           <Field
-            label="Expected monthly income (after tax)"
-            icon="trending-up"
+            label="Take-home pay per month (after tax)"
             value={income}
             onChangeText={setIncome}
             keyboardType="decimal-pad"
             placeholder="0.00"
-            hint="Used for safe-to-spend until this month’s income is logged."
+            hint="Used for what’s safe to spend until this month’s pay is in."
           />
-          <Field
-            label="Monthly savings goal"
-            icon="leaf-outline"
-            value={goal}
-            onChangeText={setGoal}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-            hint="Set aside first. A common target is 20% of income."
-          />
-          <Field
-            label="Hours you work per week"
-            icon="time-outline"
-            value={hours}
-            onChangeText={setHours}
-            keyboardType="number-pad"
-            hint="Lets Xpense show prices as hours of work."
-          />
-          <Button title="Save" icon="checkmark" onPress={saveMoney} />
+          <Field label="Savings goal per month" value={goal} onChangeText={setGoal} keyboardType="decimal-pad" placeholder="0.00" hint="Set aside first. A common goal is 10–20% of your pay." />
+          <Field label="Hours you work per week" value={hours} onChangeText={setHours} keyboardType="number-pad" hint="Shows prices as hours of your work." />
+          <Button title="Save" onPress={saveMoney} />
         </Card>
       </Section>
 
-      <Section title="Privacy & safety">
-        <Card style={{ gap: 0, paddingVertical: space.sm }}>
+      <Section title="On this device">
+        <Card seed="device" style={{ gap: 0, paddingVertical: space.sm }}>
           {Platform.OS !== 'web' && (
             <>
               <ListRow
-                icon="lock-closed"
                 title="Lock with Face ID or passcode"
                 subtitle="Ask to unlock every time Xpense opens."
                 right={toggle(settings.appLock, toggleLock, 'Lock with Face ID or passcode')}
@@ -223,89 +284,64 @@ function SettingsForm({ settings }: { settings: Settings }) {
             </>
           )}
           <ListRow
-            icon="sparkles"
-            tint={{ bg: c.wantSoft, fg: c.wantInk }}
             title="Allow AI features"
-            subtitle="Off means nothing is ever sent to the AI."
+            subtitle="Off means nothing is ever sent to the AI from this device."
             right={toggle(settings.aiConsent, (on) => setSettings(db, { ai_consent: on }), 'Allow AI features')}
           />
         </Card>
       </Section>
 
-      <Section title="Your data">
-        <Card style={{ gap: 0, paddingVertical: space.sm }}>
+      <Section title="More">
+        <Card seed="more" style={{ gap: 0, paddingVertical: space.sm }}>
           <ListRow
-            icon="phone-portrait-outline"
-            tint={{ bg: c.needSoft, fg: c.needInk }}
-            title="Stored only on this phone"
-            subtitle="No account, and your transactions are never uploaded."
-          />
-          <Divider />
-          <ListRow
-            icon="download-outline"
             title="Export as CSV"
-            subtitle={pro.isPro ? 'A spreadsheet of every entry' : 'Pro feature'}
+            subtitle={pro.isPro ? 'A spreadsheet of every entry' : 'Pro'}
             onPress={exportCSV}
-            right={busy === 'export' ? <ActivityIndicator color={c.primary} /> : undefined}
+            right={busy === 'export' ? <ActivityIndicator color={colors.ink} /> : undefined}
           />
           <Divider />
-          <ListRow icon="trash-outline" title="Delete all data" subtitle="Erase everything on this phone" destructive onPress={wipe} />
-        </Card>
-      </Section>
-
-      <Section title="About">
-        <Card style={{ gap: 0, paddingVertical: space.sm }}>
+          <ListRow
+            title="Restore purchases"
+            subtitle={pro.storeReady ? 'Bought Pro with another account?' : 'Available in the App Store version'}
+            onPress={pro.storeReady ? restore : undefined}
+            right={busy === 'restore' ? <ActivityIndicator color={colors.ink} /> : undefined}
+          />
           {SUPPORT_URL ? (
             <>
-              <ListRow icon="help-buoy-outline" title="Help & support" subtitle="Answers, and how to contact us" onPress={() => Linking.openURL(SUPPORT_URL)} />
               <Divider />
+              <ListRow title="Help & support" onPress={() => Linking.openURL(SUPPORT_URL)} />
             </>
           ) : null}
-          <ListRow
-            icon="refresh"
-            title="Restore purchases"
-            subtitle={pro.storeReady ? 'Bought Pro on another phone?' : 'Available in the App Store version'}
-            onPress={pro.storeReady ? restore : undefined}
-            right={busy === 'restore' ? <ActivityIndicator color={c.primary} /> : undefined}
-          />
           {PRIVACY_URL ? (
             <>
               <Divider />
-              <ListRow icon="shield-checkmark-outline" title="Privacy policy" onPress={() => Linking.openURL(PRIVACY_URL)} />
+              <ListRow title="Privacy policy" onPress={() => Linking.openURL(PRIVACY_URL)} />
             </>
           ) : null}
           {TERMS_URL ? (
             <>
               <Divider />
-              <ListRow icon="document-text-outline" title="Terms of use" onPress={() => Linking.openURL(TERMS_URL)} />
+              <ListRow title="Terms of use" onPress={() => Linking.openURL(TERMS_URL)} />
             </>
           ) : null}
         </Card>
-        <View style={{ alignItems: 'center', gap: 2, marginTop: space.sm }}>
-          <AppText variant="caption" muted>
-            Xpense {Constants.expoConfig?.version ?? ''}
-          </AppText>
-          <AppText variant="caption" muted selectable>
-            Support ID: {supportId}
-          </AppText>
-        </View>
       </Section>
+
+      <Button title="Delete account" kind="danger" onPress={deleteAccount} loading={busy === 'delete'} />
 
       {__DEV__ && (
         <Section title="Developer">
-          <Card style={{ gap: 0, paddingVertical: space.sm }}>
+          <Card seed="dev" style={{ gap: 0, paddingVertical: space.sm }}>
             <ListRow
-              icon="construct-outline"
               title="Simulate Pro"
               subtitle="Development builds only."
               right={toggle(settings.devPro, (on) => setSettings(db, { dev_pro: on }), 'Simulate Pro')}
             />
             <Divider />
             <ListRow
-              icon="flask-outline"
               title="Load sample data"
-              subtitle="About three months of realistic entries."
-              right={busy === 'sample' ? <ActivityIndicator color={c.primary} /> : undefined}
+              subtitle="About three months of a first job, living alone."
+              right={busy === 'sample' ? <ActivityIndicator color={colors.ink} /> : undefined}
               onPress={async () => {
                 setBusy('sample');
                 try {
@@ -319,6 +355,15 @@ function SettingsForm({ settings }: { settings: Settings }) {
           </Card>
         </Section>
       )}
+
+      <View style={{ alignItems: 'center', gap: 2 }}>
+        <AppText variant="caption" faint>
+          Xpense {Constants.expoConfig?.version ?? ''}
+        </AppText>
+        <AppText variant="caption" faint selectable style={{ fontSize: 11 }}>
+          Account ID: {user.id}
+        </AppText>
+      </View>
     </Screen>
   );
 }
@@ -326,9 +371,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View style={{ gap: space.sm }}>
-      <AppText variant="label" muted style={{ marginLeft: space.xs }}>
-        {title}
-      </AppText>
+      <Label>{title}</Label>
       {children}
     </View>
   );

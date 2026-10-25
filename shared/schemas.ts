@@ -68,10 +68,23 @@ export const ScanRequestSchema = z.object({
 });
 export type ScanRequest = z.infer<typeof ScanRequestSchema>;
 
+/** The person's budget this month, as plain numbers, so the buy check can answer for their situation. */
+export const BudgetContextSchema = z.object({
+  safe_to_spend: z.number().describe('What is left to spend this month after the savings goal and bills still due'),
+  days_left: z.number().int().min(1).max(31),
+  monthly_income: z.number().nullable(),
+  hourly_pay: z.number().nullable(),
+  savings_goal: z.number().nullable(),
+  saving_for: z.string().max(60).nullable().describe('What they are saving up for, in their own words'),
+  wants_so_far: z.number().describe('Spent on wants so far this month'),
+});
+export type BudgetContext = z.infer<typeof BudgetContextSchema>;
+
 export const CheckRequestSchema = z.object({
   item: z.string().min(1).max(200),
   price: z.number().positive(),
   currency: z.string().length(3),
+  budget: BudgetContextSchema.nullable().optional(),
 });
 export type CheckRequest = z.infer<typeof CheckRequestSchema>;
 
@@ -100,6 +113,7 @@ export const ReviewRequestSchema = z.object({
   need: z.number(),
   want: z.number(),
   savings_goal: z.number(),
+  saving_for: z.string().max(60).nullable().optional(),
   previous: z.object({ need: z.number(), want: z.number() }).nullable(),
   categories: z.array(CategoryTotalSchema).max(40),
 });

@@ -3,26 +3,36 @@
     "name": "Xpense",
     "slug": "xpense",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "xpense",
-    "userInterfaceStyle": "automatic",
-    "backgroundColor": "#F6F4EE",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F6F2EA",
     "ios": {
       "bundleIdentifier": "com.axtonnnn.xpense",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "CFBundleDisplayName": "Xpense"
+        "CFBundleDisplayName": "Xpense",
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
       },
-      "icon": "./assets/xpense.icon"
+      "icon": "./assets/xpense.icon",
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.axtonnnn.xpense",
       "adaptiveIcon": {
-        "backgroundColor": "#1E5B4F",
+        "backgroundColor": "#F6F2EA",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -39,17 +49,13 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-secure-store",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F6F4EE",
+          "backgroundColor": "#F6F2EA",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "dark": {
-            "backgroundColor": "#0F1A17",
-            "image": "./assets/images/splash-icon-dark.png"
-          }
+          "imageWidth": 200
         }
       ],
       [
@@ -63,7 +69,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Xpense uses Face ID to keep your money data locked."
+          "faceIDPermission": "Xpense uses Face ID to keep your money private."
         }
       ]
     ],
@@ -73,6 +79,8 @@
     },
     "extra": {
       "apiUrl": "",
+      "supabaseUrl": "",
+      "supabaseKey": "",
       "revenueCatIosKey": "",
       "revenueCatAndroidKey": "",
       "privacyUrl": "",

@@ -4,12 +4,10 @@ import { Platform, View } from 'react-native';
 
 import { Chip, Field, Row } from './ui';
 import { addDays, formatDay, isValidISODate, parseISODate, toISODate, today } from '@/lib/dates';
-import { space, useColors, useIsDark } from '@/theme/tokens';
+import { colors, space } from '@/theme/tokens';
 
 /** Today / Yesterday chips, plus the phone's own calendar for older dates (typed on web). */
 export function DatePicker({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
-  const c = useColors();
-  const dark = useIsDark();
   const t = today();
   const y = addDays(t, -1);
   const isOther = value !== t && value !== y;
@@ -36,7 +34,7 @@ export function DatePicker({ value, onChange }: { value: string; onChange: (iso:
       <Row style={{ flexWrap: 'wrap' }}>
         <Chip label="Today" selected={value === t} onPress={() => { setShowIOS(false); onChange(t); }} />
         <Chip label="Yesterday" selected={value === y} onPress={() => { setShowIOS(false); onChange(y); }} />
-        <Chip label={isOther && isValidISODate(value) ? formatDay(value) : 'Pick a date'} icon="calendar-outline" selected={isOther} onPress={openOther} />
+        <Chip label={isOther && isValidISODate(value) ? formatDay(value) : 'Pick a date…'} selected={isOther} onPress={openOther} />
       </Row>
       {showIOS && Platform.OS === 'ios' && (
         <DateTimePicker
@@ -45,8 +43,8 @@ export function DatePicker({ value, onChange }: { value: string; onChange: (iso:
           display="inline"
           maximumDate={new Date()}
           onChange={pick}
-          accentColor={c.primary}
-          themeVariant={dark ? 'dark' : 'light'}
+          accentColor={colors.ink}
+          themeVariant="light"
         />
       )}
       {showIOS && Platform.OS === 'web' && (

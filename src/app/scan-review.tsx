@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -6,30 +5,30 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { DatePicker } from '@/components/DatePicker';
-import { ReceiptScan } from '@/components/illustrations';
+import { ViewfinderSketch } from '@/components/illustrations';
 import { NeedWantToggle } from '@/components/money-ui';
+import { NeedMark, SketchFrame, SketchRule, SplitBar, WantMark } from '@/components/sketch';
 import { useToast } from '@/components/Toast';
-import { AppText, Banner, Button, Card, Divider, EmptyState, Pill, Row, Screen, Toggle } from '@/components/ui';
+import { AppText, Banner, Button, EmptyState, Label, Row, Screen, tabular, TextLink, Toggle } from '@/components/ui';
 import { newId } from '@/db/ids';
 import { addRecurring, applyDueRecurring } from '@/db/recurring';
 import { useSettings } from '@/db/settings';
 import { saveScannedReceipt } from '@/db/transactions';
 import { categoryInfo } from '@/lib/categories';
-import { addMonths, isValidISODate, today } from '@/lib/dates';
+import { addMonths, formatDay, isValidISODate, today } from '@/lib/dates';
 import { persistReceiptImage } from '@/lib/files';
 import { centsToInput, currencySymbol, formatMoney, parseAmount } from '@/lib/money';
 import { draftWarnings, itemsTotal, splitTotal, WARNING_TEXT, type DraftItem, type ReceiptDraft } from '@/lib/receipt';
 import { maybeAskForReview } from '@/lib/review';
 import { clearPendingScan, takePendingScan } from '@/lib/scan';
-import { fonts, radius, space, useColors } from '@/theme/tokens';
+import { colors, fonts, space } from '@/theme/tokens';
 
-const DOC_LABEL = { receipt: 'Receipt', bill: 'Bill', invoice: 'Invoice', other: 'Document' } as const;
+const DOC_LABEL = { receipt: 'receipt', bill: 'bill', invoice: 'invoice', other: 'document' } as const;
 
 export default function ScanReview() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const pending = takePendingScan(id);
   const db = useSQLiteContext();
-  const c = useColors();
   const toast = useToast();
   const settings = useSettings();
   const [draft, setDraft] = useState<ReceiptDraft | null>(pending?.draft ?? null);
@@ -46,8 +45,8 @@ export default function ScanReview() {
     return (
       <Screen>
         <EmptyState
-          illustration={<ReceiptScan />}
-          title="Nothing to review"
+          illustration={<ViewfinderSketch width={220} />}
+          title="Nothing to check"
           body="This scan has expired. Scan the receipt again from AI mode."
           action={<Button title="Back to AI mode" onPress={() => router.back()} />}
         />
@@ -60,11 +59,10 @@ export default function ScanReview() {
   const update = (patch: Partial<ReceiptDraft>) => setDraft({ ...draft, ...patch });
   const updateItem = (key: string, patch: Partial<DraftItem>) =>
     update({ items: draft.items.map((it) => (it.key === key ? { ...it, ...patch } : it)) });
-  const total = split.need + split.want;
 
   const save = async () => {
     setError(null);
-    if (totalCents <= 0) return setError('Enter the total before saving.');
+    if (totalCents <= 0) return setError('Write the total before saving.');
     if (!isValidISODate(draft.date)) return setError('Pick a valid date.');
     setSaving(true);
     try {
@@ -85,7 +83,7 @@ export default function ScanReview() {
         await applyDueRecurring(db, today(), currency);
       }
       clearPendingScan(id);
-      toast({ message: `${draft.merchant || DOC_LABEL[draft.docType]} saved · ${formatMoney(totalCents, currency)}` });
+      toast({ message: `${draft.merchant || 'Receipt'} saved · ${formatMoney(totalCents, currency)}` });
       router.dismissTo('/history');
       maybeAskForReview(db);
     } catch (e) {
@@ -95,42 +93,70 @@ export default function ScanReview() {
     }
   };
 
+  const discard = () => {
+    clearPendingScan(id);
+    router.back();
+  };
+
   return (
-    <Screen>
-      <Card style={{ flexDirection: 'row', gap: space.lg, alignItems: 'stretch' }}>
-        <Image
-          source={{ uri: pending.imageUri }}
-          style={[styles.photo, { backgroundColor: c.surfaceAlt }]}
-          contentFit="cover"
-          accessibilityLabel="Scanned photo"
-        />
-        <View style={{ flex: 1, gap: space.sm, justifyContent: 'space-between' }}>
-          <Pill icon="scan" label={DOC_LABEL[draft.docType]} color={c.primary} bg={c.primarySoft} />
+    <Screen contentStyle={{ paddingBottom: 48 }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <AppText variant="caption" muted>
+          {isValidISODate(draft.date) ? formatDay(draft.date, { weekday: 'short', day: 'numeric', month: 'short' }) : 'No date'} ·{' '}
+          {categoryInfo(draft.category, custom).label} · {DOC_LABEL[draft.docType]}
+        </AppText>
+        <AppText variant="note" muted style={{ fontSize: 18 }}>
+          {draft.confidence === 'high' ? 'read clearly' : draft.confidence === 'medium' ? 'mostly clear' : 'hard to read'}
+        </AppText>
+      </Row>
+
+      <Row style={{ alignItems: 'flex-start', gap: space.lg }}>
+        <View style={{ flex: 1, gap: 2 }}>
           <TextInput
             value={draft.merchant}
             onChangeText={(merchant) => update({ merchant })}
-            placeholder="Merchant"
-            placeholderTextColor={c.inkMuted}
-            accessibilityLabel="Merchant"
-            style={[styles.merchant, { color: c.ink, borderColor: c.border }]}
+            placeholder="Shop or biller"
+            placeholderTextColor={colors.pencil}
+            accessibilityLabel="Shop or biller"
+            multiline
+            style={styles.merchant}
           />
-          <View>
-            <AppText variant="label" muted>
-              Total
-            </AppText>
-            <Row style={[styles.totalRow, { borderColor: c.border }]}>
-              <AppText style={[styles.symbol, { color: c.inkMuted }]}>{currencySymbol(currency)}</AppText>
-              <TextInput
-                value={totalText}
-                onChangeText={setTotalText}
-                keyboardType="decimal-pad"
-                accessibilityLabel="Total"
-                style={[styles.total, { color: c.ink }]}
-              />
-            </Row>
-          </View>
+          <Row style={{ alignItems: 'baseline', gap: 2 }}>
+            <AppText style={{ fontFamily: fonts.serif, fontSize: 30, color: colors.graphite }}>{currencySymbol(currency)}</AppText>
+            <TextInput value={totalText} onChangeText={setTotalText} keyboardType="decimal-pad" accessibilityLabel="Total" style={[styles.total, tabular]} />
+          </Row>
         </View>
-      </Card>
+        {pending.imageUri ? (
+          <View style={styles.photo}>
+            <Image source={{ uri: pending.imageUri }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="Scanned photo" />
+            <SketchFrame seed={91} />
+          </View>
+        ) : null}
+      </Row>
+
+      <View style={{ gap: 8 }}>
+        <SplitBar need={split.need} want={split.want} height={14} />
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Row style={{ gap: 6 }}>
+            <NeedMark size={10} />
+            <AppText variant="caption" muted>
+              <AppText variant="caption" weight="semibold" style={tabular}>
+                {formatMoney(split.need, currency)}
+              </AppText>{' '}
+              needs
+            </AppText>
+          </Row>
+          <Row style={{ gap: 6 }}>
+            <WantMark size={10} />
+            <AppText variant="caption" muted>
+              <AppText variant="caption" weight="semibold" style={tabular}>
+                {formatMoney(split.want, currency)}
+              </AppText>{' '}
+              wants
+            </AppText>
+          </Row>
+        </Row>
+      </View>
 
       {warnings.map((w) => (
         <Banner key={w} tone={w === 'no_total' || w === 'not_receipt' ? 'danger' : 'warn'}>
@@ -138,140 +164,97 @@ export default function ScanReview() {
         </Banner>
       ))}
 
-      <View style={{ gap: space.sm }}>
-        <AppText variant="label" muted>
-          Date
+      {draft.items.length === 0 ? (
+        <View style={{ gap: space.sm }}>
+          <AppText muted>No separate lines were found. The whole {DOC_LABEL[draft.docType]} is a:</AppText>
+          <NeedWantToggle value={draft.necessity} onChange={(necessity) => update({ necessity })} />
+        </View>
+      ) : (
+        <View>
+          <Row style={{ justifyContent: 'space-between', marginBottom: 2 }}>
+            <Label>
+              {draft.items.length} {draft.items.length === 1 ? 'line' : 'lines'} · {formatMoney(itemsTotal(draft), currency)}
+            </Label>
+            <AppText variant="note" muted style={{ fontSize: 19, transform: [{ rotate: '-2deg' }] }}>
+              tap to switch ↓
+            </AppText>
+          </Row>
+          {draft.items.map((it, i) => (
+            <View key={it.key} style={styles.item}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Row style={{ gap: 8 }}>
+                  <TextInput value={it.name} onChangeText={(name) => updateItem(it.key, { name })} style={styles.itemName} accessibilityLabel="Item name" />
+                  <ItemPrice cents={it.totalCents} label={`${it.name} price`} onChange={(totalCents) => updateItem(it.key, { totalCents })} />
+                </Row>
+                {it.reason ? (
+                  <AppText variant="note" faint numberOfLines={1} style={{ fontSize: 18, lineHeight: 20 }}>
+                    {it.reason.charAt(0).toLowerCase() + it.reason.slice(1)}
+                  </AppText>
+                ) : null}
+              </View>
+              <NeedWantToggle value={it.necessity} onChange={(necessity) => updateItem(it.key, { necessity })} />
+              <Pressable
+                onPress={() => update({ items: draft.items.filter((x) => x.key !== it.key) })}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${it.name}`}
+                hitSlop={8}>
+                <AppText faint style={{ fontSize: 20 }}>
+                  ×
+                </AppText>
+              </Pressable>
+              {i < draft.items.length - 1 && <SketchRule seed={60 + i} opacity={0.2} style={styles.itemRule} />}
+            </View>
+          ))}
+          <View style={{ marginTop: space.sm }}>
+            <TextLink
+              label="+ Add a line"
+              onPress={() =>
+                update({
+                  items: [
+                    ...draft.items,
+                    { key: `new-${Date.now()}`, name: 'New item', qty: null, totalCents: 0, category: draft.category, necessity: 'need', reason: null },
+                  ],
+                })
+              }
+            />
+          </View>
+        </View>
+      )}
+
+      {draft.items.length > 0 && (draft.taxCents ?? 0) + (draft.tipCents ?? 0) > 0 && (
+        <AppText variant="caption" faint>
+          Tax and tip ({formatMoney((draft.taxCents ?? 0) + (draft.tipCents ?? 0), currency)}) are shared between needs and wants in proportion.
         </AppText>
+      )}
+
+      {draft.notes && <Banner>{draft.notes}</Banner>}
+
+      <View style={{ gap: space.sm }}>
+        <Label>Date</Label>
         <DatePicker value={draft.date} onChange={(date) => update({ date })} />
       </View>
 
-      <Card>
-        <AppText variant="title">Needs vs wants</AppText>
-        <View style={styles.splitTrack}>
-          {split.need > 0 && <View style={{ flex: split.need, backgroundColor: c.need, borderRadius: 5 }} />}
-          {split.want > 0 && <View style={{ flex: split.want, backgroundColor: c.want, borderRadius: 5 }} />}
-          {total <= 0 && <View style={{ flex: 1, backgroundColor: c.surfaceAlt, borderRadius: 5 }} />}
-        </View>
-        <Row style={{ gap: space.xl }}>
-          <SplitValue color={c.need} label="Needs" value={formatMoney(split.need, currency)} />
-          <SplitValue color={c.want} label="Wants" value={formatMoney(split.want, currency)} />
-        </Row>
-        {draft.items.length === 0 && (
-          <>
-            <AppText muted>No line items were found. Mark the whole {DOC_LABEL[draft.docType].toLowerCase()} as:</AppText>
-            <NeedWantToggle value={draft.necessity} onChange={(necessity) => update({ necessity })} />
-          </>
-        )}
-      </Card>
-
-      {draft.items.length > 0 && (
-        <Card style={{ gap: 0, paddingVertical: space.sm }}>
-          <Row style={{ justifyContent: 'space-between', paddingVertical: space.sm }}>
-            <AppText variant="title">Items</AppText>
-            <AppText variant="caption" weight="semibold" muted>
-              {draft.items.length} · {formatMoney(itemsTotal(draft), currency)}
-            </AppText>
-          </Row>
-          {draft.items.map((it) => (
-            <View key={it.key}>
-              <Divider />
-              <View style={{ gap: space.sm, paddingVertical: space.md }}>
-                <Row>
-                  <TextInput
-                    value={it.name}
-                    onChangeText={(name) => updateItem(it.key, { name })}
-                    style={[styles.itemName, { color: c.ink }]}
-                    accessibilityLabel="Item name"
-                  />
-                  <ItemPrice cents={it.totalCents} label={`${it.name} price`} onChange={(totalCents) => updateItem(it.key, { totalCents })} />
-                  <Pressable
-                    onPress={() => update({ items: draft.items.filter((x) => x.key !== it.key) })}
-                    accessibilityLabel={`Remove ${it.name}`}
-                    hitSlop={8}>
-                    <Ionicons name="close-circle" size={22} color={c.border} />
-                  </Pressable>
-                </Row>
-                <NeedWantToggle value={it.necessity} onChange={(necessity) => updateItem(it.key, { necessity })} />
-                {it.reason && (
-                  <AppText variant="caption" muted numberOfLines={2}>
-                    {categoryInfo(it.category, custom).label} · {it.reason}
-                  </AppText>
-                )}
-              </View>
-            </View>
-          ))}
-          <Divider />
-          <Button
-            title="Add a line"
-            icon="add"
-            kind="ghost"
-            onPress={() =>
-              update({
-                items: [
-                  ...draft.items,
-                  { key: `new-${Date.now()}`, name: 'New item', qty: null, totalCents: 0, category: draft.category, necessity: 'need', reason: null },
-                ],
-              })
-            }
-          />
-        </Card>
-      )}
-
-      {draft.items.length > 0 && (
-        <AppText variant="caption" muted center>
-          Tax, tip and fees are shared between needs and wants in proportion.
-        </AppText>
-      )}
-
-      {draft.notes && <Banner icon="chatbubble-ellipses-outline">{draft.notes}</Banner>}
-
       {draft.docType === 'bill' && (
-        <Card>
-          <Row style={{ justifyContent: 'space-between', gap: space.md }}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <AppText weight="semibold">Repeat this bill monthly</AppText>
-              <AppText variant="caption" muted>
-                Xpense adds it each month and keeps it out of your safe-to-spend.
-              </AppText>
-            </View>
-            <Toggle value={makeRecurring} onValueChange={setMakeRecurring} label="Repeat this bill monthly" />
-          </Row>
-        </Card>
+        <Row style={{ justifyContent: 'space-between', gap: space.md }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText weight="medium">Repeat this bill every month</AppText>
+            <AppText variant="caption" faint>
+              Xpense adds it when it’s due and keeps it out of what’s safe to spend.
+            </AppText>
+          </View>
+          <Toggle value={makeRecurring} onValueChange={setMakeRecurring} label="Repeat this bill every month" />
+        </Row>
       )}
 
       {error && <Banner tone="danger">{error}</Banner>}
-      <Button title="Save expense" icon="checkmark" onPress={save} loading={saving} />
-      <Button
-        title="Discard"
-        kind="ghost"
-        onPress={() => {
-          clearPendingScan(id);
-          router.back();
-        }}
-      />
+      <Button title="Save expense" onPress={save} loading={saving} />
+      <Button title="Discard" kind="ghost" onPress={discard} />
     </Screen>
-  );
-}
-
-function SplitValue({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <View style={{ gap: 2 }}>
-      <AppText weight="extrabold" style={{ fontSize: 18 }}>
-        {value}
-      </AppText>
-      <Row style={{ gap: 6 }}>
-        <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: color }} />
-        <AppText variant="caption" weight="semibold" muted>
-          {label}
-        </AppText>
-      </Row>
-    </View>
   );
 }
 
 /** Keeps the typed text (e.g. "4.") while editing, and reports cents whenever it parses. */
 function ItemPrice({ cents, label, onChange }: { cents: number; label: string; onChange: (cents: number) => void }) {
-  const c = useColors();
   const [text, setText] = useState(centsToInput(cents));
   return (
     <TextInput
@@ -283,18 +266,17 @@ function ItemPrice({ cents, label, onChange }: { cents: number; label: string; o
       }}
       keyboardType="decimal-pad"
       accessibilityLabel={label}
-      style={[styles.price, { color: c.ink, backgroundColor: c.surfaceAlt }]}
+      style={[styles.price, tabular]}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  photo: { width: 96, height: 128, borderRadius: radius.sm },
-  merchant: { fontFamily: fonts.bold, fontSize: 18, borderBottomWidth: 1, paddingVertical: 4, paddingHorizontal: 0, minWidth: 0, outlineStyle: 'solid', outlineWidth: 0 },
-  totalRow: { gap: 4, borderBottomWidth: 1 },
-  symbol: { fontFamily: fonts.extrabold, fontSize: 20 },
-  total: { flex: 1, minWidth: 0, fontFamily: fonts.extrabold, fontSize: 28, paddingVertical: 2, paddingHorizontal: 0, outlineStyle: 'solid', outlineWidth: 0 },
-  splitTrack: { flexDirection: 'row', height: 10, gap: 3 },
-  itemName: { flex: 1, minWidth: 0, fontFamily: fonts.semibold, fontSize: 16, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
-  price: { width: 92, textAlign: 'right', fontFamily: fonts.bold, fontSize: 16, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, outlineStyle: 'solid', outlineWidth: 0 },
+  merchant: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 38, color: colors.ink, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  total: { flex: 1, minWidth: 0, fontFamily: fonts.serif, fontSize: 52, lineHeight: 60, color: colors.ink, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  photo: { width: 72, height: 96, backgroundColor: colors.page, overflow: 'hidden' },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
+  itemRule: { position: 'absolute', left: 0, right: 0, bottom: -3 },
+  itemName: { flex: 1, minWidth: 0, fontFamily: fonts.regular, fontSize: 15, color: colors.ink, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
+  price: { width: 70, textAlign: 'right', fontFamily: fonts.semibold, fontSize: 15, color: colors.ink, padding: 0, outlineStyle: 'solid', outlineWidth: 0 },
 });

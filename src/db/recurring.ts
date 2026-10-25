@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { Necessity } from '../../shared/schemas';
+import { recordDeletions } from './changes';
 import { newId, nowISO } from './ids';
 import { notifyChange } from './live';
 import { inTransaction } from './tx';
@@ -41,9 +42,10 @@ export async function addRecurring(
   },
 ): Promise<string> {
   const id = newId();
+  const now = nowISO();
   await db.runAsync(
-    `INSERT INTO recurring (id, type, label, amount_cents, category, necessity, note, cadence, anchor_on, next_on, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    `INSERT INTO recurring (id, type, label, amount_cents, category, necessity, note, cadence, anchor_on, next_on, active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     id,
     r.type,
     r.label,
@@ -54,7 +56,8 @@ export async function addRecurring(
     r.cadence,
     r.startOn,
     r.startOn,
-    nowISO(),
+    now,
+    now,
   );
   notifyChange();
   return id;
@@ -66,13 +69,22 @@ export async function setRecurringActive(db: SQLiteDatabase, id: string, active:
     if (!rule) return;
     // Resuming picks up from today; what was missed while paused is not booked.
     const nextOn = active ? resumeOn(rule, today) : rule.next_on;
-    await db.runAsync('UPDATE recurring SET active = ?, next_on = ? WHERE id = ?', active ? 1 : 0, nextOn, id);
+    await db.runAsync(
+      'UPDATE recurring SET active = ?, next_on = ?, updated_at = ?, dirty = 1 WHERE id = ?',
+      active ? 1 : 0,
+      nextOn,
+      nowISO(),
+      id,
+    );
   });
   notifyChange();
 }
 
 export async function deleteRecurring(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync('DELETE FROM recurring WHERE id = ?', id);
+  await inTransaction(db, async () => {
+    await db.runAsync('DELETE FROM recurring WHERE id = ?', id);
+    await recordDeletions(db, 'recurring', [id]);
+  });
   notifyChange();
 }
 
@@ -98,11 +110,12 @@ export async function applyDueRecurring(db: SQLiteDatabase, today: string, curre
             occurredOn: date,
             source: 'recurring',
             recurringId: rule.id,
+            id: `${rule.id}:${date}`,
           },
           false,
         );
       }
-      await db.runAsync('UPDATE recurring SET next_on = ? WHERE id = ?', nextOn, rule.id);
+      await db.runAsync('UPDATE recurring SET next_on = ?, updated_at = ?, dirty = 1 WHERE id = ?', nextOn, nowISO(), rule.id);
       booked += dates.length;
     }
   });
