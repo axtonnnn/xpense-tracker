@@ -236,7 +236,7 @@ export async function saveScannedReceipt(
       split.want,
       draft.currency,
       draft.merchant || null,
-      draft.notes,
+      null, // the AI's remark (draft.notes) is shown while reviewing; the note field is the person's own
       transactionCategory(draft),
       draft.date,
       receiptId,

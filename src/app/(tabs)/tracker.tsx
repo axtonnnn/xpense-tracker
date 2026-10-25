@@ -117,6 +117,7 @@ export default function Tracker() {
           amountCents: cents,
           category,
           necessity: type === 'expense' ? necessity : null,
+          note,
           cadence: repeat,
           startOn: date,
         });

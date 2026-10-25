@@ -4,7 +4,7 @@ import { categorize } from '../categorize';
 import { niceTicks, roundedTopBar } from '../chart';
 import { addMonths, isValidISODate, startOfWeek } from '../dates';
 import { parseAmount } from '../money';
-import { dueOccurrences, monthlyEquivalent, upcomingOccurrences, type RecurringRule } from '../recurring';
+import { dueOccurrences, monthlyEquivalent, resumeOn, upcomingOccurrences, type RecurringRule } from '../recurring';
 
 describe('parseAmount', () => {
   it.each([
@@ -85,6 +85,12 @@ describe('recurring', () => {
   it('handles weekly and biweekly cadences', () => {
     expect(dueOccurrences(rule({ cadence: 'weekly', next_on: '2026-10-01', anchor_on: '2026-10-01' }), '2026-10-22').dates).toHaveLength(4);
     expect(dueOccurrences(rule({ cadence: 'biweekly', next_on: '2026-10-01', anchor_on: '2026-10-01' }), '2026-10-22').nextOn).toBe('2026-10-29');
+  });
+
+  it('resumes a paused rule from today instead of booking what was missed', () => {
+    expect(resumeOn(rule({ next_on: '2026-07-31' }), '2026-10-23')).toBe('2026-10-31');
+    expect(resumeOn(rule({ cadence: 'weekly', next_on: '2026-10-01', anchor_on: '2026-10-01' }), '2026-10-22')).toBe('2026-10-22');
+    expect(resumeOn(rule({ next_on: '2026-11-30' }), '2026-10-23')).toBe('2026-11-30');
   });
 
   it('ignores paused rules', () => {

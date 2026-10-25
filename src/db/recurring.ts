@@ -5,12 +5,14 @@ import { newId, nowISO } from './ids';
 import { notifyChange } from './live';
 import { inTransaction } from './tx';
 import { insertTransaction, type TxType } from './transactions';
-import { dueOccurrences, type Cadence, type RecurringRule } from '@/lib/recurring';
+import { today as todayISO } from '@/lib/dates';
+import { dueOccurrences, resumeOn, type Cadence, type RecurringRule } from '@/lib/recurring';
 
 export type Recurring = RecurringRule & {
   label: string;
   category: string;
   necessity: Necessity | null;
+  note: string | null;
   created_at: string;
 };
 
@@ -33,20 +35,22 @@ export async function addRecurring(
     amountCents: number;
     category: string;
     necessity: Necessity | null;
+    note?: string | null;
     cadence: Cadence;
     startOn: string;
   },
 ): Promise<string> {
   const id = newId();
   await db.runAsync(
-    `INSERT INTO recurring (id, type, label, amount_cents, category, necessity, cadence, anchor_on, next_on, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    `INSERT INTO recurring (id, type, label, amount_cents, category, necessity, note, cadence, anchor_on, next_on, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     id,
     r.type,
     r.label,
     r.amountCents,
     r.category,
     r.type === 'income' ? null : r.necessity,
+    r.note?.trim() || null,
     r.cadence,
     r.startOn,
     r.startOn,
@@ -56,8 +60,14 @@ export async function addRecurring(
   return id;
 }
 
-export async function setRecurringActive(db: SQLiteDatabase, id: string, active: boolean): Promise<void> {
-  await db.runAsync('UPDATE recurring SET active = ? WHERE id = ?', active ? 1 : 0, id);
+export async function setRecurringActive(db: SQLiteDatabase, id: string, active: boolean, today = todayISO()): Promise<void> {
+  await inTransaction(db, async () => {
+    const rule = await db.getFirstAsync<Recurring>('SELECT * FROM recurring WHERE id = ?', id);
+    if (!rule) return;
+    // Resuming picks up from today; what was missed while paused is not booked.
+    const nextOn = active ? resumeOn(rule, today) : rule.next_on;
+    await db.runAsync('UPDATE recurring SET active = ?, next_on = ? WHERE id = ?', active ? 1 : 0, nextOn, id);
+  });
   notifyChange();
 }
 
@@ -83,6 +93,7 @@ export async function applyDueRecurring(db: SQLiteDatabase, today: string, curre
             necessity: rule.necessity,
             currency,
             merchant: rule.label,
+            note: rule.note,
             category: rule.category,
             occurredOn: date,
             source: 'recurring',

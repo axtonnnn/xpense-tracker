@@ -129,6 +129,13 @@ describe('safeToSpend', () => {
     expect(over.perDay).toBe(0);
   });
 
+  it('counts paychecks still due this month, like the bills', () => {
+    const pay = { ...rent, id: 'p', type: 'income' as const, amount_cents: 200000, anchor_on: '2026-10-15', next_on: '2026-10-30' };
+    const s = safeToSpend({ today: '2026-10-23', txs: [inc('2026-10-15', 200000)], expectedIncomeCents: 0, savingsGoalCents: 0, recurring: [rent, pay] });
+    expect(s.income).toBe(400000);
+    expect(s.amount).toBe(400000 - 100000);
+  });
+
   it('asks for income when none is known', () => {
     expect(safeToSpend({ today: '2026-10-23', txs: [], expectedIncomeCents: 0, savingsGoalCents: 0, recurring: [] }).status).toBe('unset');
   });

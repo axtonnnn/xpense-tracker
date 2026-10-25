@@ -53,6 +53,13 @@ export function upcomingOccurrences(rule: RecurringRule, after: string, until: s
   return out;
 }
 
+/** Where a resumed rule picks up: its first date on or after `today`, so nothing missed while paused is booked. */
+export function resumeOn(rule: Pick<RecurringRule, 'next_on' | 'cadence' | 'anchor_on'>, today: string): string {
+  let next = rule.next_on;
+  while (next < today) next = nextOccurrence(next, rule.cadence, rule.anchor_on);
+  return next;
+}
+
 /** Rough monthly equivalent of a rule, used for expected income. */
 export function monthlyEquivalent(rule: Pick<RecurringRule, 'amount_cents' | 'cadence'>): number {
   switch (rule.cadence) {

@@ -145,7 +145,8 @@ export type SafeToSpend = {
 
 /**
  * What you can still spend this month without touching your savings goal or upcoming bills:
- * income (actual or expected, whichever is higher) − savings goal − spent − bills still due this month.
+ * income − savings goal − spent − bills still due this month. Income is what has come in plus the
+ * repeating paychecks still due this month, or the expected monthly income if that is higher.
  */
 export function safeToSpend(input: {
   today: string;
@@ -157,12 +158,14 @@ export function safeToSpend(input: {
   const start = startOfMonth(input.today);
   const end = endOfMonth(input.today);
   const t = totals(input.txs, start, end);
-  const income = Math.max(t.income, input.expectedIncomeCents);
   let upcomingBills = 0;
+  let upcomingIncome = 0;
   for (const r of input.recurring) {
-    if (r.type !== 'expense') continue;
-    upcomingBills += upcomingOccurrences(r, input.today, end).length * r.amount_cents;
+    const due = upcomingOccurrences(r, input.today, end).length * r.amount_cents;
+    if (r.type === 'expense') upcomingBills += due;
+    else upcomingIncome += due;
   }
+  const income = Math.max(t.income + upcomingIncome, input.expectedIncomeCents);
   const amount = income - input.savingsGoalCents - t.spent - upcomingBills;
   const daysLeft = diffDays(input.today, end) + 1;
   const perDay = amount > 0 ? Math.floor(amount / daysLeft) : 0;

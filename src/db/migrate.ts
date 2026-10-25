@@ -63,6 +63,8 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  // 2: a repeating entry's note is copied onto each entry it books.
+  `ALTER TABLE recurring ADD COLUMN note TEXT;`,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
