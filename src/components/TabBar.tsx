@@ -1,34 +1,22 @@
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Logo } from './brand';
-import { Scribble, SketchCircle, SketchRule } from './sketch';
-import { AppText, haptic } from './ui';
+import { Icon, type IconName } from './icons';
+import { timing, useMotion } from './motion';
+import { AppText, Avatar, haptic } from './ui';
 import { useSettings } from '@/db/settings';
 import { useSync } from '@/db/SyncProvider';
 import { useAuth } from '@/lib/auth';
 import { usePro } from '@/lib/pro';
-import { colors, fonts, useWide } from '@/theme/tokens';
+import { colors, fonts, motion, useWide } from '@/theme/tokens';
 
-// Drawn on a 24 × 24 grid with round ink strokes, like the rest of the sketchbook.
-export const TAB_ICONS: Record<string, string> = {
-  index: 'M4 20.5h16 M6.5 20V13 M12 20V6 M17.5 20v-9',
-  ai: 'M12 3.5c.7 4.3 2.4 6.1 6.5 6.9-4.1.8-5.8 2.6-6.5 6.9-.7-4.3-2.4-6.1-6.5-6.9 4.1-.8 5.8-2.6 6.5-6.9z M19 15.5l.5 2 2 .5-2 .5-.5 2-.5-2-2-.5 2-.5z',
-  tracker: 'M4.5 19.5l1.2-4.4L15.6 5.2a1.9 1.9 0 0 1 2.7 0l.5.5a1.9 1.9 0 0 1 0 2.7L8.9 18.3z M14 6.8l3.2 3.2',
-  history: 'M9 6.5h11 M9 12h11 M9 17.5h11 M4 5.5h2.5v2.5H4z M4 11h2.5v2.5H4z M4 16.5h2.5v2.5H4z',
-  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M12 3v2.5 M12 18.5V21 M3 12h2.5 M18.5 12H21 M5.6 5.6l1.8 1.8 M16.6 16.6l1.8 1.8 M5.6 18.4l1.8-1.8 M16.6 7.4l1.8-1.8',
-};
-
-export function TabIcon({ name, color, size = 26 }: { name: string; color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path d={TAB_ICONS[name] ?? TAB_ICONS.index} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
+const TAB_ICONS: Record<string, IconName> = { index: 'dashboard', ai: 'ai', tracker: 'tracker', history: 'history', savings: 'goal' };
+/** Tabs that only show in the iPad and Mac sidebar. */
+const SIDEBAR_ONLY = ['savings'];
 
 /** Bottom tabs on phones; on iPad and Mac the same tabs become a sidebar (see the tabs layout). */
 export function TabBar(props: BottomTabBarProps) {
@@ -42,19 +30,51 @@ function useTabs({ state, descriptors, emitter, navigateToTab }: BottomTabBarPro
     const onPress = () => {
       const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
       if (!focused && !event.defaultPrevented) {
-        haptic('select');
+        haptic('light');
         navigateToTab(route.key);
       }
     };
-    return { key: route.key, name: route.name, label, focused, onPress, onLongPress: () => emitter.emit({ type: 'tabLongPress', target: route.key }) };
+    return {
+      key: route.key,
+      name: route.name,
+      icon: TAB_ICONS[route.name] ?? 'dashboard',
+      label,
+      focused,
+      onPress,
+      onLongPress: () => emitter.emit({ type: 'tabLongPress', target: route.key }),
+    };
   });
 }
 
-function BottomBar(props: BottomTabBarProps) {
-  const tabs = useTabs(props);
+/**
+ * An icon that fills in and lifts 2 px when its tab is chosen (180 ms): the outline fades out as the
+ * filled one fades in.
+ */
+function NavIcon({ name, focused, size, ground }: { name: IconName; focused: boolean; size: number; ground: string }) {
+  const moving = useMotion();
+  const p = useSharedValue(focused ? 1 : 0);
+  useEffect(() => {
+    p.set(withTiming(focused ? 1 : 0, timing(moving ? motion.small : 1)));
+  }, [focused, moving, p]);
+  const lift = useAnimatedStyle(() => ({ transform: [{ translateY: moving ? -2 * p.value : 0 }] }));
+  const on = useAnimatedStyle(() => ({ opacity: p.value }));
+  const off = useAnimatedStyle(() => ({ opacity: 1 - p.value }));
   return (
-    <View accessibilityRole="tablist" style={[styles.bar, { paddingBottom: Math.max(props.insets.bottom, 10) }]}>
-      <SketchRule seed={3} opacity={0.35} style={styles.barRule} />
+    <Animated.View style={[{ width: size, height: size }, lift]}>
+      <Animated.View style={[StyleSheet.absoluteFill, off]}>
+        <Icon name={name} size={size} color={colors.grey} />
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, on]}>
+        <Icon name={name} size={size} color={colors.ink} filled ground={ground} />
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+function BottomBar(props: BottomTabBarProps) {
+  const tabs = useTabs(props).filter((t) => !SIDEBAR_ONLY.includes(t.name));
+  return (
+    <View accessibilityRole="tablist" style={[styles.bar, { paddingBottom: Math.max(props.insets.bottom - 4, 12) }]}>
       {tabs.map((t) => (
         <Pressable
           key={t.key}
@@ -64,64 +84,73 @@ function BottomBar(props: BottomTabBarProps) {
           onPress={t.onPress}
           onLongPress={t.onLongPress}
           style={styles.item}>
-          <TabIcon name={t.name} color={t.focused ? colors.ink : colors.pencil} />
-          <Text numberOfLines={1} style={[styles.label, { color: t.focused ? colors.ink : colors.pencil, fontFamily: t.focused ? fonts.semibold : fonts.medium }]}>
+          <NavIcon name={t.icon} focused={t.focused} size={22} ground={colors.paper} />
+          <Text numberOfLines={1} style={[styles.label, { color: t.focused ? colors.ink : colors.grey, fontFamily: t.focused ? fonts.medium : fonts.regular }]}>
             {t.label}
           </Text>
-          <View style={{ height: 6, opacity: t.focused ? 1 : 0 }}>
-            <Scribble width={20} />
-          </View>
         </Pressable>
       ))}
     </View>
   );
 }
 
+const SIDE_ITEM = 44;
+const SIDE_GAP = 2;
+
 function SideBar(props: BottomTabBarProps) {
   const tabs = useTabs(props);
+  const moving = useMotion();
   const { user } = useAuth();
   const settings = useSettings();
-  const { status } = useSync();
+  const { status, lastSyncedAt } = useSync();
   const { isPro } = usePro();
   const name = settings?.name || user?.name || user?.email?.split('@')[0] || 'You';
-  const where = status === 'local' ? 'on this device' : status === 'offline' ? 'offline' : 'synced';
+  const synced =
+    status === 'local' ? 'On this device' : status === 'offline' ? 'Offline' : lastSyncedAt ? `Synced ${sinceText(lastSyncedAt)}` : 'Syncing…';
+  const selected = tabs.findIndex((t) => t.focused);
+
+  // The white plate slides to the chosen item.
+  const y = useSharedValue(selected * (SIDE_ITEM + SIDE_GAP));
+  useEffect(() => {
+    const to = selected * (SIDE_ITEM + SIDE_GAP);
+    y.set(moving ? withTiming(to, timing(motion.small)) : to);
+  }, [selected, moving, y]);
+  const plate = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+
   return (
-    <View accessibilityRole="tablist" style={[styles.side, { paddingTop: props.insets.top + 36, paddingBottom: Math.max(props.insets.bottom, 24) }]}>
-      <View style={styles.sideRule}>
-        <SideRule />
-      </View>
+    <View accessibilityRole="tablist" style={[styles.side, { paddingTop: props.insets.top + 32, paddingBottom: Math.max(props.insets.bottom, 24) }]}>
       <View style={{ paddingHorizontal: 8 }}>
-        <Logo size={26} />
+        <Logo size={22} />
       </View>
-      <View style={{ gap: 4, marginTop: 36 }}>
+      <View style={{ gap: SIDE_GAP, marginTop: 36 }}>
+        {selected >= 0 && <Animated.View pointerEvents="none" style={[styles.plate, plate]} />}
         {tabs.map((t) => (
-          <SideItem key={t.key} icon={t.name} label={t.label} focused={t.focused} onPress={t.onPress} role="tab" />
+          <SideItem key={t.key} icon={t.icon} label={t.label} focused={t.focused} onPress={t.onPress} role="tab" />
         ))}
-        <SideItem icon="settings" label="Settings" focused={false} onPress={() => router.push('/settings')} role="button" />
       </View>
-      <Pressable
-        onPress={() => router.push('/settings')}
-        accessibilityRole="button"
-        accessibilityLabel="Account and settings"
-        style={({ pressed }) => [styles.account, { opacity: pressed ? 0.6 : 1 }]}>
-        <SketchCircle size={36} seed={83}>
-          <Text style={{ fontFamily: fonts.serif, fontSize: 20, color: colors.ink }}>{name.slice(0, 1).toUpperCase()}</Text>
-        </SketchCircle>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <AppText weight="semibold" numberOfLines={1} style={{ fontSize: 14 }}>
-            {name}
-          </AppText>
-          <AppText variant="caption" faint style={{ fontSize: 12 }}>
-            {isPro ? `Pro · ${where}` : where.charAt(0).toUpperCase() + where.slice(1)}
-          </AppText>
-        </View>
-      </Pressable>
+      <View style={{ marginTop: 'auto', gap: SIDE_GAP }}>
+        <SideItem icon="settings" label="Settings" focused={false} onPress={() => router.push('/settings')} role="button" />
+        <Pressable
+          onPress={() => router.push('/settings')}
+          accessibilityRole="button"
+          accessibilityLabel={`${name}, ${isPro ? 'Pro, ' : ''}${synced}. Account and settings`}
+          style={({ pressed }) => [styles.account, { opacity: pressed ? 0.6 : 1 }]}>
+          <Avatar name={name} size={36} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <AppText weight="medium" numberOfLines={1} style={{ fontSize: 14, lineHeight: 18 }}>
+              {name}
+            </AppText>
+            <AppText variant="small" muted numberOfLines={1}>
+              {isPro ? `Pro · ${synced.charAt(0).toLowerCase()}${synced.slice(1)}` : synced}
+            </AppText>
+          </View>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
-function SideItem({ icon, label, focused, onPress, role }: { icon: string; label: string; focused: boolean; onPress: () => void; role: 'tab' | 'button' }) {
-  const [w, setW] = useState(0);
+function SideItem({ icon, label, focused, onPress, role }: { icon: IconName; label: string; focused: boolean; onPress: () => void; role: 'tab' | 'button' }) {
   return (
     <Pressable
       accessibilityRole={role}
@@ -129,35 +158,50 @@ function SideItem({ icon, label, focused, onPress, role }: { icon: string; label
       accessibilityState={role === 'tab' ? { selected: focused } : undefined}
       onPress={onPress}
       style={({ pressed }) => [styles.sideItem, { opacity: pressed ? 0.6 : 1 }]}>
-      <TabIcon name={icon} size={22} color={focused ? colors.ink : colors.graphite} />
-      <View>
-        <Text
-          onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}
-          style={{ fontFamily: focused ? fonts.semibold : fonts.medium, fontSize: 15, color: focused ? colors.ink : colors.graphite }}>
-          {label}
-        </Text>
-        {focused && w > 0 && <Scribble width={w} style={{ position: 'absolute', bottom: -9 }} />}
-      </View>
+      <NavIcon name={icon} focused={focused} size={20} ground={colors.page} />
+      <Text style={{ fontFamily: focused ? fonts.medium : fonts.regular, fontSize: 15, color: focused ? colors.ink : colors.grey }}>{label}</Text>
     </Pressable>
   );
 }
 
-/** The sidebar's right edge: a long vertical pencil line. */
-function SideRule() {
-  return (
-    <Svg width={6} height="100%" viewBox="0 0 6 100" preserveAspectRatio="none">
-      <Path d="M3 0 Q 4.4 50 2.6 100" stroke={colors.ink} strokeWidth={1} fill="none" opacity={0.3} vectorEffect="non-scaling-stroke" />
-    </Svg>
-  );
+/** "just now", "2 min ago", "at 9:41". */
+export function sinceText(at: Date): string {
+  const mins = Math.floor((Date.now() - at.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  return `at ${at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', paddingTop: 10, paddingHorizontal: 12, backgroundColor: colors.paper },
-  barRule: { position: 'absolute', left: 0, right: 0, top: -2 },
-  item: { flex: 1, alignItems: 'center', gap: 3, minHeight: 48 },
+  bar: {
+    flexDirection: 'row',
+    paddingTop: 8,
+    backgroundColor: colors.paper,
+    borderTopWidth: 1,
+    borderTopColor: colors.rule,
+  },
+  item: { flex: 1, alignItems: 'center', gap: 5, paddingVertical: 6, minHeight: 48 },
   label: { fontSize: 11, lineHeight: 14 },
-  side: { width: 232, paddingHorizontal: 24, backgroundColor: colors.paper },
-  sideRule: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 6 },
-  sideItem: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 44, paddingHorizontal: 8 },
-  account: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8 },
+  side: { width: 240, paddingHorizontal: 20, backgroundColor: colors.paper, borderRightWidth: 1, borderRightColor: colors.rule },
+  plate: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: SIDE_ITEM,
+    backgroundColor: colors.page,
+    borderWidth: 1,
+    borderColor: colors.rule,
+  },
+  sideItem: { flexDirection: 'row', alignItems: 'center', gap: 12, height: SIDE_ITEM, paddingHorizontal: 8 },
+  account: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 14,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.rule,
+  },
 });

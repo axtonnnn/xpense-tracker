@@ -1,28 +1,28 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/brand';
-import { NeedMark, PageFill, SketchFrame, Stamp } from '@/components/sketch';
-import { AppText, Banner, Button, Row, TextLink } from '@/components/ui';
+import { Mark } from '@/components/marks';
+import { Appear, timing, useMotion } from '@/components/motion';
+import { useToast } from '@/components/Toast';
+import { AppText, Button, haptic, IconButton, Notice, Screen, TextLink } from '@/components/ui';
 import { PRIVACY_URL, PRO_MONTHLY_SCANS, TERMS_URL } from '@/lib/config';
-import { notify } from '@/lib/confirm';
 import { PREVIEW_PLANS } from '@/lib/preview-plans';
 import { usePro } from '@/lib/pro';
-import { colors, space } from '@/theme/tokens';
+import { colors, motion } from '@/theme/tokens';
 
 const FEATURE_TITLE: Record<string, string> = {
-  ai_scan: 'You’ve used your free scans',
-  ai_check: '“Should I buy this?” is a Pro feature',
-  ai_review: 'Monthly AI review is a Pro feature',
-  long_range_charts: 'Long-range charts are a Pro feature',
-  category_breakdown: 'Category breakdown is a Pro feature',
-  unlimited_recurring: 'Free plan includes 3 repeating items',
-  csv_export: 'CSV export is a Pro feature',
-  custom_categories: 'Custom categories are a Pro feature',
+  ai_scan: 'You’ve used your free scans. Pro keeps the AI reading your receipts.',
+  ai_check: '“Should I buy this?” is part of Xpense Pro.',
+  ai_review: 'The monthly review is part of Xpense Pro.',
+  long_range_charts: 'Six-month and yearly trends are part of Xpense Pro.',
+  category_breakdown: 'Spending by category is part of Xpense Pro.',
+  unlimited_recurring: 'The free plan includes 3 repeating items. Pro has no limit.',
+  csv_export: 'CSV export is part of Xpense Pro.',
+  custom_categories: 'Your own categories are part of Xpense Pro.',
 };
 
 function periodLabel(pkg: PurchasesPackage): string {
@@ -60,20 +60,28 @@ function yearlySaving(packages: PurchasesPackage[]): number | null {
   return pct > 0 ? pct : null;
 }
 
+const BENEFITS = [
+  `Up to ${PRO_MONTHLY_SCANS} receipt and bill scans a month`,
+  '“Should I buy this?”, checked against your own budget',
+  'A short monthly review with three tips',
+  'Six-month and yearly trends, spending by category',
+  'Unlimited repeating bills and paychecks',
+  'CSV export and your own categories',
+];
+
 export default function Paywall() {
-  const insets = useSafeAreaInsets();
   const { feature } = useLocalSearchParams<{ feature?: string }>();
   const pro = usePro();
+  const toast = useToast();
   // Development builds without a store (Expo Go, web) show stand-in plans so the screen can be tried.
   const preview = __DEV__ && !pro.storeReady;
   const packages = preview ? PREVIEW_PLANS : (pro.offering?.availablePackages ?? []);
   const trialFor = (p: PurchasesPackage) => (preview || pro.trialEligible(p.product.identifier) ? trialText(p) : null);
-  const previewOnly = () =>
-    notify('Preview only', 'Purchases work in TestFlight and App Store builds. To try Pro here, turn on Settings → Developer → Simulate Pro.');
-  const [picked, setSelected] = useState<PurchasesPackage | null>(null);
+  const previewOnly = () => toast({ message: 'Purchases work in TestFlight and App Store builds. Settings → Developer → Simulate Pro tries it here.', quiet: true });
+  const [picked, setPicked] = useState<PurchasesPackage | null>(null);
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Default to the yearly plan (best value) until the user picks one.
+  // The yearly plan (best value) until the person picks one.
   const selected = picked ?? packages.find((p) => p.packageType === PACKAGE_TYPE.ANNUAL) ?? packages[0] ?? null;
   const saving = yearlySaving(packages);
 
@@ -81,7 +89,10 @@ export default function Paywall() {
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
   useEffect(() => {
-    if (pro.isPro) close();
+    if (pro.isPro) {
+      haptic('success');
+      close();
+    }
   }, [pro.isPro]);
 
   const buy = async () => {
@@ -113,124 +124,161 @@ export default function Paywall() {
   };
 
   const trial = selected ? trialFor(selected) : null;
-  const BENEFITS = [
-    `Up to ${PRO_MONTHLY_SCANS} AI receipt and bill scans a month`,
-    '“Should I buy this?”, checked against your own budget',
-    'A short monthly review with three tips',
-    'Six-month and yearly trends, spending by category',
-    'Unlimited repeating bills and paychecks',
-    'CSV export and your own categories',
-  ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.paper }}>
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + space.lg, paddingBottom: insets.bottom + space.xl, paddingHorizontal: 24, width: '100%', maxWidth: 560, alignSelf: 'center', gap: 20 }}
-        showsVerticalScrollIndicator={false}>
-        <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12} style={styles.close}>
-          <Ionicons name="close" size={24} color={colors.ink} />
-        </Pressable>
-        <View style={{ alignItems: 'center', gap: space.sm }}>
-          <AppIcon size={84} />
-          <AppText variant="display" center>
-            Xpense Pro
-          </AppText>
-          <AppText muted center>
-            {(feature && FEATURE_TITLE[feature]) || 'Spend on what matters. Let the AI do the busywork.'}
-          </AppText>
-        </View>
-
-        <View style={{ gap: 12 }}>
-          {BENEFITS.map((b) => (
-            <Row key={b} style={{ gap: 12, alignItems: 'flex-start' }}>
-              <View style={{ marginTop: 6 }}>
-                <NeedMark size={9} />
-              </View>
-              <AppText style={{ flex: 1, fontSize: 15, lineHeight: 22 }}>{b}</AppText>
-            </Row>
-          ))}
-        </View>
-
-        {packages.length > 0 ? (
-          <View style={{ gap: 12 }}>
-            {packages.map((p) => {
-              const active = selected?.identifier === p.identifier;
-              const t = trialFor(p);
-              const annual = p.packageType === PACKAGE_TYPE.ANNUAL;
-              return (
-                <Pressable
-                  key={p.identifier}
-                  onPress={() => setSelected(p)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
-                  style={styles.plan}>
-                  <PageFill />
-                  <SketchFrame seed={annual ? 401 : 403} weight={active ? 2.2 : 1.2} opacity={active ? 1 : 0.5} twice={active} />
-                  <View style={[styles.radio, active && { backgroundColor: colors.ink }]} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <AppText weight="semibold">{periodLabel(p)}</AppText>
-                    {t && (
-                      <AppText variant="caption" muted>
-                        {t}
-                      </AppText>
-                    )}
-                    {annual && p.product.pricePerMonthString && (
-                      <AppText variant="caption" muted>
-                        Just {p.product.pricePerMonthString} a month
-                      </AppText>
-                    )}
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <AppText weight="semibold">
-                      {p.product.priceString}
-                      <AppText variant="caption" muted>
-                        {' '}
-                        {perLabel(p)}
-                      </AppText>
-                    </AppText>
-                    {annual && saving !== null && <Stamp label={`save ${saving}%`} tilt={-4} style={{ paddingHorizontal: 8 }} />}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <Banner>
-            {pro.storeReady
-              ? 'Plans are loading. Check your connection and try again.'
-              : 'Purchases aren’t available in this build. Install the App Store version to subscribe.'}
-          </Banner>
-        )}
-
-        {error && <Banner tone="danger">{error}</Banner>}
-
-        <Button title={trial ? `Start ${trial}` : 'Subscribe'} onPress={buy} loading={busy === 'buy'} disabled={!selected} />
-        <Button title="Restore purchases" kind="ghost" onPress={restore} loading={busy === 'restore'} disabled={!pro.storeReady && !preview} />
-
-        <AppText variant="caption" faint center>
-          {selected
-            ? `${trial ? `After the ${trial}, ` : ''}${selected.product.priceString} ${perLabel(selected)} is charged to your App Store or Google Play account. `
-            : ''}
-          The subscription renews automatically unless you cancel at least 24 hours before the end of the current period. Manage or cancel any time in
-          your account settings.
+    <Screen contentStyle={{ maxWidth: 520, paddingBottom: 40 }}>
+      <View style={{ alignItems: 'flex-end' }}>
+        <IconButton icon="close" label="Close" onPress={close} style={{ marginRight: -10 }} />
+      </View>
+      <Appear>
+        <AppIcon size={72} style={{ marginTop: 8 }} />
+        <AppText weight="light" accessibilityRole="header" style={styles.title}>
+          Xpense Pro
         </AppText>
-        <Row style={{ justifyContent: 'center', gap: space.lg }}>
-          {TERMS_URL ? <TextLink label="Terms of Use" onPress={() => Linking.openURL(TERMS_URL)} /> : null}
-          {PRIVACY_URL ? <TextLink label="Privacy Policy" onPress={() => Linking.openURL(PRIVACY_URL)} /> : null}
-        </Row>
-        {__DEV__ && !PRIVACY_URL && (
-          <Banner tone="warn">
-            Developer note: the Terms and Privacy links appear once extra.apiUrl in app.json points at your AI server, which hosts both pages. App
-            Review needs them on this screen.
-          </Banner>
-        )}
-      </ScrollView>
-    </View>
+        <AppText muted style={{ marginTop: 10 }}>
+          {(feature && FEATURE_TITLE[feature]) || 'Spend on what matters. Let the AI do the busywork.'}
+        </AppText>
+      </Appear>
+
+      <View style={{ marginTop: 28, gap: 12 }}>
+        {BENEFITS.map((b, i) => (
+          <Appear key={b} delay={60 + i * motion.rowStagger}>
+            <View style={{ flexDirection: 'row' }}>
+              <Mark kind="need" size={6} style={{ width: 20, paddingTop: 8 }} />
+              <AppText style={{ flex: 1 }}>{b}</AppText>
+            </View>
+          </Appear>
+        ))}
+      </View>
+
+      {packages.length > 0 ? (
+        <View style={{ marginTop: 32, gap: 12 }} accessibilityRole="radiogroup" accessibilityLabel="Plans">
+          {packages.map((p) => {
+            const t = trialFor(p);
+            const annual = p.packageType === PACKAGE_TYPE.ANNUAL;
+            const sub = [t, annual && p.product.pricePerMonthString ? `${p.product.pricePerMonthString} a month` : null].filter(Boolean).join(' · ');
+            return (
+              <Plan
+                key={p.identifier}
+                active={selected?.identifier === p.identifier}
+                onPress={() => {
+                  haptic('select');
+                  setPicked(p);
+                }}
+                title={periodLabel(p)}
+                sub={sub || (p.packageType === PACKAGE_TYPE.MONTHLY ? 'Cancel any time' : '')}
+                price={p.product.priceString}
+                per={perLabel(p)}
+                tag={annual && saving !== null ? `SAVE ${saving}%` : null}
+              />
+            );
+          })}
+        </View>
+      ) : (
+        <Notice style={{ marginTop: 32 }}>
+          {pro.storeReady ? 'Plans are loading. Check your connection and try again.' : 'Purchases aren’t available in this build. Install the App Store version to subscribe.'}
+        </Notice>
+      )}
+
+      {error && (
+        <Appear distance={4}>
+          <Notice tone="alert" style={{ marginTop: 20 }}>
+            {error}
+          </Notice>
+        </Appear>
+      )}
+
+      <Button title={trial ? `Start ${trial}` : 'Subscribe'} onPress={buy} loading={busy === 'buy'} disabled={!selected} style={{ marginTop: 24 }} />
+      <TextLink label="Restore purchases" onPress={restore} style={{ alignSelf: 'center', marginTop: 8 }} />
+
+      <AppText variant="small" muted center style={{ marginTop: 16, lineHeight: 17 }}>
+        {selected ? `${trial ? `After the ${trial}, ` : ''}${selected.product.priceString} ${perLabel(selected)} is charged to your App Store or Google Play account. ` : ''}
+        It renews automatically unless you cancel at least 24 hours before the end of the current period. Manage or cancel any time in your account
+        settings.
+      </AppText>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 4 }}>
+        {TERMS_URL ? <TextLink label="Terms of Use" small onPress={() => Linking.openURL(TERMS_URL)} style={{ minHeight: 40, justifyContent: 'center' }} /> : null}
+        {PRIVACY_URL ? <TextLink label="Privacy Policy" small onPress={() => Linking.openURL(PRIVACY_URL)} style={{ minHeight: 40, justifyContent: 'center' }} /> : null}
+      </View>
+      {__DEV__ && !PRIVACY_URL && (
+        <Notice style={{ marginTop: 16 }}>
+          Developer note: the Terms and Privacy links appear once extra.apiUrl in app.json points at your AI server, which hosts both pages. App Review needs
+          them on this screen.
+        </Notice>
+      )}
+    </Screen>
+  );
+}
+
+/** A plan to pick: the chosen one gets a heavier ink edge and a filled radio dot. */
+function Plan({
+  active,
+  onPress,
+  title,
+  sub,
+  price,
+  per,
+  tag,
+}: {
+  active: boolean;
+  onPress: () => void;
+  title: string;
+  sub: string;
+  price: string;
+  per: string;
+  tag: string | null;
+}) {
+  const moving = useMotion();
+  const p = useSharedValue(active ? 1 : 0);
+  useEffect(() => {
+    p.set(moving ? withTiming(active ? 1 : 0, timing(motion.small)) : active ? 1 : 0);
+  }, [active, moving, p]);
+  const edge = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(p.value, [0, 1], [colors.rule, colors.ink]),
+    backgroundColor: interpolateColor(p.value, [0, 1], ['rgba(255,255,255,0)', colors.page]),
+  }));
+  const dot = useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
+  return (
+    <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ checked: active }} accessibilityLabel={`${title}, ${price} ${per}${sub ? `, ${sub}` : ''}`}>
+      <Animated.View style={[styles.plan, { borderWidth: active ? 2 : 1, padding: active ? 15 : 16 }, edge]}>
+        <View style={styles.radio}>
+          <Animated.View style={[styles.radioDot, dot]} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <AppText weight="medium" style={{ lineHeight: 20 }}>
+            {title}
+          </AppText>
+          {sub ? (
+            <AppText variant="caption" muted>
+              {sub}
+            </AppText>
+          ) : null}
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          <AppText weight="medium" style={{ lineHeight: 20 }}>
+            {price}
+            <AppText variant="caption" muted>
+              {' '}
+              {per}
+            </AppText>
+          </AppText>
+          {tag && (
+            <View style={styles.tag}>
+              <AppText variant="axis" style={{ lineHeight: 14, letterSpacing: 0.6 }}>
+                {tag}
+              </AppText>
+            </View>
+          )}
+        </View>
+      </Animated.View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  close: { alignSelf: 'flex-end', width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginBottom: -space.xl },
-  plan: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18 },
-  radio: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.4, borderColor: colors.ink },
+  title: { fontSize: 48, lineHeight: 50, letterSpacing: -1.92, marginTop: 20 },
+  plan: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  radio: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.ink },
+  tag: { borderWidth: 1, borderColor: colors.ink, paddingHorizontal: 6, paddingVertical: 2 },
 });

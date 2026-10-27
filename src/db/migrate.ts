@@ -94,6 +94,34 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  // 4: the savings goal (one active at a time) and the money moved in and out of it. Status and kind are
+  // checked in code, not here, so a newer device can sync a value this version doesn't know yet.
+  `
+  CREATE TABLE goals (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    target_cents INTEGER NOT NULL,
+    started_on TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    finished_on TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT '',
+    dirty INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE TABLE goal_deposits (
+    id TEXT PRIMARY KEY NOT NULL,
+    goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    amount_cents INTEGER NOT NULL,
+    occurred_on TEXT NOT NULL,
+    note TEXT,
+    kind TEXT NOT NULL DEFAULT 'deposit',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT '',
+    dirty INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE INDEX idx_deposits_goal ON goal_deposits(goal_id);
+  CREATE INDEX idx_deposits_date ON goal_deposits(occurred_on);
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

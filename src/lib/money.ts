@@ -63,7 +63,7 @@ export function formatAxis(cents: number, currency: string): string {
   const major = cents / 100;
   if (Math.abs(major) >= 1000) {
     const k = major / 1000;
-    return `${currencySymbol(currency)}${k >= 10 ? Math.round(k) : k.toFixed(1)}k`;
+    return `${currencySymbol(currency)}${k >= 10 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, '')}k`;
   }
   return formatMoney(cents, currency, { compact: true });
 }
@@ -71,4 +71,71 @@ export function formatAxis(cents: number, currency: string): string {
 /** Cents → editable string like "12.50" (no currency symbol). */
 export function centsToInput(cents: number): string {
   return (cents / 100).toFixed(2);
+}
+
+const figureFormatters = new Map<string, Intl.NumberFormat>();
+
+/** Decimal places a currency uses: 2 for USD, 0 for JPY. */
+export function currencyDigits(currency: string): number {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    return 2;
+  }
+}
+
+/**
+ * Figures for lists, legends and charts: "1,483.92" with no currency symbol (the screen's currency is
+ * implied). `sign` adds "+" or "−" (a true minus).
+ */
+export function formatFigure(cents: number, currency: string, opts: { sign?: boolean; whole?: boolean } = {}): string {
+  const digits = opts.whole ? 0 : currencyDigits(currency);
+  const key = String(digits);
+  let f = figureFormatters.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    figureFormatters.set(key, f);
+  }
+  const body = f.format(Math.abs(cents) / 100);
+  if (opts.sign) return `${cents < 0 ? '−' : '+'}${body}`;
+  return cents < 0 ? `−${body}` : body;
+}
+
+/**
+ * A big amount in three parts, so the symbol and the cents can sit small beside the whole number:
+ * { symbol: "$", whole: "728", fraction: ".20" }. `symbolAfter` is true where the locale writes "728 €".
+ */
+export function splitMoney(cents: number, currency: string): { negative: boolean; symbol: string; whole: string; fraction: string; symbolAfter: boolean } {
+  const negative = cents < 0;
+  try {
+    const parts = formatter(currency, false).formatToParts(Math.abs(cents) / 100);
+    let symbol = '';
+    let whole = '';
+    let fraction = '';
+    let seenNumber = false;
+    let symbolAfter = false;
+    for (const p of parts) {
+      if (p.type === 'currency') {
+        symbol = p.value;
+        symbolAfter = seenNumber;
+      } else if (p.type === 'integer' || p.type === 'group') {
+        whole += p.value;
+        seenNumber = true;
+      } else if (p.type === 'decimal' || p.type === 'fraction') {
+        fraction += p.value;
+      }
+    }
+    if (whole) return { negative, symbol: symbol || currency, whole, fraction, symbolAfter };
+  } catch {
+    // Older Intl without formatToParts: fall through.
+  }
+  const text = formatFigure(Math.abs(cents), currency);
+  const dot = text.lastIndexOf('.');
+  return {
+    negative,
+    symbol: currencySymbol(currency),
+    whole: dot >= 0 ? text.slice(0, dot) : text,
+    fraction: dot >= 0 ? text.slice(dot) : '',
+    symbolAfter: false,
+  };
 }

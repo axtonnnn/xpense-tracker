@@ -23,7 +23,7 @@ export function LogoMark({ size = 32, ink = colors.ink, paper = colors.paper }: 
   // Hatching ~4.5 px apart at any size; below 48 px the wants leaves are drawn as outlines instead.
   const hatched = size >= 48;
   const gap = 4.5 / unit;
-  const outline = 1.2 / unit;
+  const outline = 1.6 / unit;
   const leaf = (angle: number, want: boolean) => (
     <G key={angle} transform={`translate(512 512) rotate(${angle})`}>
       <Path d={LEAF} fill={want ? (hatched ? `url(#${id})` : paper) : ink} stroke={want ? ink : 'none'} strokeWidth={want ? outline : 0} />
@@ -47,13 +47,13 @@ export function LogoMark({ size = 32, ink = colors.ink, paper = colors.paper }: 
   );
 }
 
-/** Mark + "xpense" wordmark in Instrument Serif italic. Pass mark={false} for the wordmark alone. */
+/** Mark + "xpense" wordmark in Instrument Serif italic (the only serif in the app). Pass mark={false} for the wordmark alone. */
 export function Logo({ size = 28, mark = true, color = colors.ink }: { size?: number; mark?: boolean; color?: string }) {
-  const fontSize = size * 1.08;
+  const fontSize = size * 1.18;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.34 }} accessible accessibilityRole="header" accessibilityLabel="Xpense">
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.36 }} accessible accessibilityRole="header" accessibilityLabel="Xpense">
       {mark && <LogoMark size={size} ink={color} />}
-      <Text style={{ fontFamily: fonts.serifItalic, fontSize, lineHeight: fontSize * 1.1, color }}>xpense</Text>
+      <Text style={{ fontFamily: fonts.wordmark, fontSize, lineHeight: fontSize * 1.1, color }}>xpense</Text>
     </View>
   );
 }
@@ -69,7 +69,7 @@ export function AppIcon({ size = 88, style }: { size?: number; style?: StyleProp
           borderRadius: size * 0.2237,
           backgroundColor: colors.paper,
           borderWidth: 1,
-          borderColor: 'rgba(17,17,17,0.14)',
+          borderColor: colors.rule,
           alignItems: 'center',
           justifyContent: 'center',
         },

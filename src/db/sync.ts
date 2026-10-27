@@ -6,10 +6,12 @@
 //   2. applies it unless its own copy is newer (last edit wins),
 //   3. pushes its own changes and deletions.
 // Receipt photos and AI raw answers stay on the device that scanned them.
+// If the server is missing a newer kind (its schema.sql predates it), those records wait on the device
+// and everything else keeps syncing; running supabase/schema.sql again lets them through.
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { KINDS, type Kind } from './changes';
+import { KINDS, NEWER_KINDS, type Kind } from './changes';
 import { notifyChange } from './live';
 import { DEVICE_SETTINGS } from './settings';
 import { inTransaction } from './tx';
@@ -57,6 +59,12 @@ export const TABLES: Record<Kind, Table> = {
       'id', 'type', 'amount_cents', 'need_cents', 'want_cents', 'currency', 'merchant', 'note', 'category',
       'occurred_on', 'source', 'receipt_id', 'recurring_id', 'created_at',
     ],
+  },
+  goal: { name: 'goals', key: 'id', columns: ['id', 'name', 'target_cents', 'started_on', 'status', 'finished_on', 'created_at'] },
+  goal_deposit: {
+    name: 'goal_deposits',
+    key: 'id',
+    columns: ['id', 'goal_id', 'amount_cents', 'occurred_on', 'note', 'kind', 'created_at'],
   },
 };
 
@@ -123,6 +131,7 @@ async function applyRecord(db: SQLiteDatabase, r: RemoteRecord, images: string[]
   const data = { ...r.data };
   // A line or entry whose receipt (or repeat) isn't on this device keeps going without the link.
   if (r.kind === 'receipt_item' && !(await db.getFirstAsync('SELECT 1 FROM receipts WHERE id = ?', String(data.receipt_id)))) return false;
+  if (r.kind === 'goal_deposit' && !(await db.getFirstAsync('SELECT 1 FROM goals WHERE id = ?', String(data.goal_id)))) return false;
   if (r.kind === 'transaction') {
     if (data.receipt_id && !(await db.getFirstAsync('SELECT 1 FROM receipts WHERE id = ?', String(data.receipt_id)))) data.receipt_id = null;
     if (data.recurring_id && !(await db.getFirstAsync('SELECT 1 FROM recurring WHERE id = ?', String(data.recurring_id)))) data.recurring_id = null;
@@ -165,13 +174,26 @@ export async function syncOnce(db: SQLiteDatabase, remote: Remote): Promise<Sync
 
   // Push: changed rows in parent-first order, then deletions.
   let pushed = 0;
+  const held = new Set<Kind>();
+  /** Pushes one batch; a newer kind the server doesn't know yet is held back instead of failing the sync. */
+  const send = async (kind: Kind, records: RemoteRecord[]): Promise<boolean> => {
+    try {
+      await remote.push(records);
+      return true;
+    } catch (e) {
+      if (!NEWER_KINDS.includes(kind)) throw e;
+      if (!held.has(kind)) console.warn(`[sync] the server doesn't take "${kind}" yet; run supabase/schema.sql again`, e);
+      held.add(kind);
+      return false;
+    }
+  };
   for (const kind of KINDS) {
     const t = TABLES[kind];
     for (;;) {
       const rows = await db.getAllAsync<Record<string, unknown>>(`SELECT * FROM ${t.name} WHERE dirty = 1 LIMIT ${PUSH_BATCH}`);
       const local = kind === 'setting' ? rows.filter((r) => DEVICE_SETTINGS.includes(String(r.key) as never)) : [];
       const records = rows.filter((r) => !local.includes(r)).map((r) => toRecord(kind, r));
-      if (records.length > 0) await remote.push(records);
+      if (records.length > 0 && !(await send(kind, records))) break;
       for (const r of rows) {
         await db.runAsync(`UPDATE ${t.name} SET dirty = 0 WHERE ${t.key} = ? AND updated_at = ?`, r[t.key] as string, r.updated_at as string);
       }
@@ -180,11 +202,14 @@ export async function syncOnce(db: SQLiteDatabase, remote: Remote): Promise<Sync
     }
   }
   const deletions = await db.getAllAsync<{ kind: Kind; id: string; deleted_at: string }>('SELECT kind, id, deleted_at FROM sync_deletes');
-  for (let i = 0; i < deletions.length; i += PUSH_BATCH) {
-    const batch = deletions.slice(i, i + PUSH_BATCH);
-    await remote.push(batch.map((d) => ({ kind: d.kind, id: d.id, data: null, deleted: true, updated_at: d.deleted_at })));
-    for (const d of batch) await db.runAsync('DELETE FROM sync_deletes WHERE kind = ? AND id = ? AND deleted_at = ?', d.kind, d.id, d.deleted_at);
-    pushed += batch.length;
+  for (const kind of KINDS) {
+    const mine = deletions.filter((d) => d.kind === kind);
+    for (let i = 0; i < mine.length; i += PUSH_BATCH) {
+      const batch = mine.slice(i, i + PUSH_BATCH);
+      if (!(await send(kind, batch.map((d) => ({ kind: d.kind, id: d.id, data: null, deleted: true, updated_at: d.deleted_at }))))) break;
+      for (const d of batch) await db.runAsync('DELETE FROM sync_deletes WHERE kind = ? AND id = ? AND deleted_at = ?', d.kind, d.id, d.deleted_at);
+      pushed += batch.length;
+    }
   }
   return { pulled, pushed };
 }

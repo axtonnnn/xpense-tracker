@@ -1,44 +1,44 @@
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
-import { NeedMark } from './sketch';
-import { AppText, Button, Row } from './ui';
-import { colors, space } from '@/theme/tokens';
+import { Mark } from './marks';
+import { Sheet } from './Sheet';
+import { AppText, Button, TextLink } from './ui';
 
+// What the AI sees, in the app's words. The privacy policy names the AI provider.
 export const AI_DISCLOSURE = [
-  'Receipt photos you scan, things you check before buying (with a few numbers about this month’s budget), and the monthly totals behind your review are sent securely to our AI service, which uses Anthropic’s Claude.',
-  'They are used only to answer that request. We don’t keep them, and Anthropic doesn’t use them to train its AI models.',
-  'Everything else, like your history and your account, stays private to your Xpense account and is never shown to the AI.',
+  'Receipt photos, things you check before buying (with a few numbers about this month’s budget) and the totals behind your review go securely to our AI service.',
+  'They’re used only to answer that request. We don’t keep them, and they aren’t used to train AI models.',
+  'Everything else, like your history and your account, stays private and is never shown to the AI.',
 ];
 
-/** Explicit opt-in required before any personal data is shared with third-party AI (App Review 5.1.2(i)). */
-export function ConsentSheet({ visible, onAllow, onCancel }: { visible: boolean; onAllow: () => void; onCancel: () => void }) {
+export function DisclosureList({ size = 15 }: { size?: number }) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel} accessibilityLabel="Close">
-        <Pressable style={styles.sheet} onPress={() => undefined}>
-          <View style={styles.grabber} />
-          <AppText variant="title">Let the AI read your receipts?</AppText>
-          {AI_DISCLOSURE.map((line) => (
-            <Row key={line} style={{ alignItems: 'flex-start', gap: space.md }}>
-              <View style={{ marginTop: 6 }}>
-                <NeedMark size={8} />
-              </View>
-              <AppText style={{ flex: 1, fontSize: 15, lineHeight: 22 }}>{line}</AppText>
-            </Row>
-          ))}
-          <AppText variant="note" muted>
-            you can turn this off any time in Settings
-          </AppText>
-          <Button title="Allow and continue" onPress={onAllow} />
-          <Button title="Not now" kind="ghost" onPress={onCancel} />
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <View style={{ gap: 14 }}>
+      {AI_DISCLOSURE.map((line) => (
+        <View key={line} style={{ flexDirection: 'row', gap: 14 }}>
+          <Mark kind="need" size={6} style={{ marginTop: size === 15 ? 8 : 7 }} />
+          <AppText style={{ flex: 1, fontSize: size, lineHeight: size === 15 ? 22 : 20 }}>{line}</AppText>
+        </View>
+      ))}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(17,17,17,0.35)' },
-  sheet: { padding: space.xl, gap: space.md, backgroundColor: colors.paper, paddingBottom: space.xxl + 8, width: '100%', maxWidth: 640, alignSelf: 'center' },
-  grabber: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: space.sm, backgroundColor: colors.sand },
-});
+/** Explicit opt-in before any personal data goes to a third-party AI (App Review 5.1.2(i)). */
+export function ConsentSheet({ visible, onAllow, onCancel }: { visible: boolean; onAllow: () => void; onCancel: () => void }) {
+  return (
+    <Sheet open={visible} onClose={onCancel}>
+      <AppText weight="light" accessibilityRole="header" style={{ fontSize: 32, lineHeight: 36, letterSpacing: -0.96, marginTop: 20 }}>
+        Let the AI read your receipts?
+      </AppText>
+      <View style={{ marginTop: 20 }}>
+        <DisclosureList />
+      </View>
+      <AppText variant="caption" muted style={{ marginTop: 16 }}>
+        You can turn this off any time in Settings.
+      </AppText>
+      <Button title="Allow and continue" onPress={onAllow} style={{ marginTop: 24 }} />
+      <TextLink label="Not now" onPress={onCancel} style={{ alignSelf: 'center', marginTop: 8 }} />
+    </Sheet>
+  );
+}

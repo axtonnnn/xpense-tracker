@@ -1,15 +1,13 @@
-// Design-system primitives shared by every screen: paper, white pages with sketched frames, ink buttons,
-// underlined fields and serif headings. See docs/brand/README.md for the rules behind them.
-import Ionicons from '@expo/vector-icons/Ionicons';
+// Design-system primitives shared by every screen: bone paper, square ink buttons, fields that are a line
+// to write on, text tabs, chips, a square switch, rows and notices. See docs/brand/README.md for the rules.
 import * as Haptics from 'expo-haptics';
-import { useId, useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -18,35 +16,38 @@ import {
   type StyleProp,
   type TextInputProps,
   type TextProps,
+  type TextStyle,
   type ViewProps,
   type ViewStyle,
 } from 'react-native';
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming, type AnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PageFill, Scribble, seedOf, SketchFrame, SketchRule } from './sketch';
-import { colors, fonts, READABLE_MAX, space, type as typeScale } from '@/theme/tokens';
+import { Icon, type IconName } from './icons';
+import { Mark, type MarkKind } from './marks';
+import { timing, useMotion } from './motion';
+import { colors, fonts, MARGIN, motion, READABLE_MAX, space, type as typeScale, useWide, WIDE_MARGIN } from '@/theme/tokens';
 
-export type IconName = ComponentProps<typeof Ionicons>['name'];
+export type { IconName };
 
 type TextVariant = keyof typeof typeScale;
-type Weight = 'regular' | 'medium' | 'semibold';
+type Weight = 'extralight' | 'light' | 'regular' | 'medium';
 
 export function AppText({
   variant = 'body',
   weight,
   color,
   muted,
-  faint,
   center,
   style,
   ...rest
-}: TextProps & { variant?: TextVariant; weight?: Weight; color?: string; muted?: boolean; faint?: boolean; center?: boolean }) {
+}: TextProps & { variant?: TextVariant; weight?: Weight; color?: string; muted?: boolean; center?: boolean }) {
   return (
     <Text
       style={[
         typeScale[variant],
         weight && { fontFamily: fonts[weight] },
-        { color: color ?? (faint ? colors.pencil : muted ? colors.graphite : colors.ink) },
+        { color: color ?? (muted ? colors.grey : colors.ink) },
         center && { textAlign: 'center' },
         style,
       ]}
@@ -60,6 +61,7 @@ export const tabular = { fontVariant: ['tabular-nums' as const] };
 
 type HapticKind = 'light' | 'select' | 'success' | 'warning';
 
+/** Felt, not heard. Haptics stay on with Reduce Motion. */
 export function haptic(kind: HapticKind = 'light'): void {
   if (Platform.OS === 'web') return;
   if (kind === 'select') Haptics.selectionAsync();
@@ -68,53 +70,81 @@ export function haptic(kind: HapticKind = 'light'): void {
   else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 }
 
-/** A Pressable that dips slightly while pressed, with optional haptic feedback. */
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/** A Pressable that dips to 97% while pressed (120 ms), with an optional haptic tick. */
 export function PressableScale({
   style,
   haptics,
   onPress,
+  onPressIn,
+  onPressOut,
   children,
+  scaleTo = 0.97,
   ...rest
-}: Omit<PressableProps, 'style'> & { style?: StyleProp<ViewStyle>; haptics?: HapticKind; children?: ReactNode }) {
+}: Omit<PressableProps, 'style' | 'children'> & {
+  style?: StyleProp<AnimatedStyle<StyleProp<ViewStyle>>>;
+  haptics?: HapticKind;
+  children?: ReactNode;
+  scaleTo?: number;
+}) {
+  const moving = useMotion();
+  const p = useSharedValue(0);
+  const anim = useAnimatedStyle(() =>
+    moving ? { transform: [{ scale: 1 - (1 - scaleTo) * p.value }] } : { opacity: 1 - 0.35 * p.value },
+  );
   return (
-    <Pressable
+    <AnimatedPressable
       {...rest}
+      onPressIn={(e) => {
+        p.set(withTiming(1, timing(motion.quick)));
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        p.set(withTiming(0, timing(motion.quick)));
+        onPressOut?.(e);
+      }}
       onPress={(e) => {
         if (haptics) haptic(haptics);
         onPress?.(e);
       }}
-      style={({ pressed }) => [style, pressed && { transform: [{ scale: 0.98 }], opacity: 0.85 }]}>
+      style={[style, anim]}>
       {children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
-/** A stable seed for this component instance, so its sketched frame keeps the same wobble. */
-export function useSeed(seed?: number | string): number {
-  const id = useId();
-  return typeof seed === 'number' ? seed : seedOf(seed ?? id);
+/** Side margins: 24 on phones, 40 beside the iPad and Mac sidebar. */
+export function useMargin(): number {
+  return useWide() ? WIDE_MARGIN : MARGIN;
 }
 
 /**
- * The paper every screen is drawn on. Content is centred and stops at a readable width on iPad and Mac;
+ * The paper every screen sits on. Content is centred and stops at a readable width on iPad and Mac;
  * pass `full` for screens that lay out their own columns.
  */
 export function Screen({
   children,
   scroll = true,
   full,
-  topInset,
+  topInset = true,
   contentStyle,
 }: {
   children: ReactNode;
   scroll?: boolean;
   full?: boolean;
-  /** Pad for the status bar (screens without a navigation header). */
+  /** Pad for the status bar (every screen draws its own header). */
   topInset?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
-  const inner = [styles.screen, !full && styles.readable, topInset && { paddingTop: insets.top + space.md }, contentStyle];
+  const margin = useMargin();
+  const inner = [
+    styles.screen,
+    { paddingHorizontal: margin, paddingTop: topInset ? insets.top + 12 : space.lg },
+    !full && styles.readable,
+    contentStyle,
+  ];
   if (!scroll) return <View style={[{ flex: 1, backgroundColor: colors.paper }, inner]}>{children}</View>;
   return (
     <ScrollView
@@ -123,79 +153,74 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       automaticallyAdjustKeyboardInsets
-      contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}>
       {children}
     </ScrollView>
   );
 }
 
-/** A white page with a sketched frame. */
-export function Card({ children, style, seed }: { children: ReactNode; style?: StyleProp<ViewStyle>; seed?: number | string }) {
-  const s = useSeed(seed);
+/** A screen's big title (Display 60), with an optional line above and something on the right. */
+export function PageTitle({ title, over, right, style }: { title: string; over?: ReactNode; right?: ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
-    <View style={[styles.card, style]}>
-      <PageFill />
-      <SketchFrame seed={s} />
-      {children}
+    <View style={style}>
+      {over ? typeof over === 'string' ? <AppText variant="caption" muted>{over}</AppText> : over : null}
+      <View style={styles.titleRow}>
+        <AppText variant="display" accessibilityRole="header" style={{ flexShrink: 1, marginTop: over ? 4 : 0 }}>
+          {title}
+        </AppText>
+        {right}
+      </View>
     </View>
   );
 }
 
-/** A screen's heading: an optional pencil note above a serif title, with something on the right. */
-export function PageTitle({ title, note, right }: { title: string; note?: string; right?: ReactNode }) {
+/** A pushed screen's top bar: a back (or close) button, and an optional action on the right. */
+export function TopBar({ onBack, close, right }: { onBack: () => void; close?: boolean; right?: ReactNode }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md }}>
-      <View style={{ flexShrink: 1 }}>
-        {note && <AppText variant="note" muted>{note}</AppText>}
-        <AppText variant="display" accessibilityRole="header">
-          {title}
-        </AppText>
-      </View>
+    <View style={styles.topBar}>
+      <IconButton icon={close ? 'close' : 'back'} label={close ? 'Close' : 'Back'} onPress={onBack} style={{ marginLeft: -10 }} />
       {right}
     </View>
   );
 }
 
-export function SectionTitle({
-  children,
+/** Section header: a mono number, a 22 title, and an optional small link on the right. */
+export function SectionHeader({
+  index,
+  title,
   action,
-  note,
+  style,
 }: {
-  children: ReactNode;
+  index?: string;
+  title: string;
   action?: { label: string; onPress: () => void };
-  note?: string;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={styles.sectionTitle}>
-      <AppText variant="title" accessibilityRole="header">
-        {children}
-      </AppText>
-      {action ? (
-        <TextLink label={action.label} onPress={action.onPress} />
-      ) : note ? (
-        <AppText variant="note" muted style={{ fontSize: 19 }}>
-          {note}
+    <View style={[styles.sectionHeader, style]}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, flexShrink: 1 }}>
+        {index && (
+          <AppText variant="index" muted aria-hidden>
+            {index}
+          </AppText>
+        )}
+        <AppText variant="title" accessibilityRole="header" style={{ flexShrink: 1 }}>
+          {title}
         </AppText>
-      ) : null}
+      </View>
+      {action && <TextLink label={action.label} onPress={action.onPress} small />}
     </View>
   );
 }
 
-/** Small uppercase label above a group, e.g. "SAFE TO SPEND". */
-export function Label({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  return (
-    <View style={style}>
-      <AppText variant="label" muted>
-        {children}
-      </AppText>
-    </View>
-  );
+/** The line between sections: 40 above, 28 below. Pass `tight` for a bare line. */
+export function Rule({ tight, style }: { tight?: boolean; style?: StyleProp<ViewStyle> }) {
+  return <View style={[{ height: 1, backgroundColor: colors.rule }, !tight && { marginTop: space.section, marginBottom: 28 }, style]} />;
 }
 
-type ButtonKind = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonKind = 'primary' | 'secondary' | 'danger';
 
-/** primary: an ink plate. secondary: a sketched outline. ghost: plain text. danger: red text in an outline. */
+/** Square, 52 high. primary: ink. secondary: an ink outline. danger: alert red, for deleting only. */
 export function Button({
   title,
   onPress,
@@ -203,8 +228,10 @@ export function Button({
   icon,
   loading,
   disabled,
+  compact,
   style,
   accessibilityLabel,
+  accessibilityHint,
 }: {
   title: string;
   onPress: () => void;
@@ -212,28 +239,39 @@ export function Button({
   icon?: IconName;
   loading?: boolean;
   disabled?: boolean;
+  /** 48 high, 14 text: buttons that sit side by side. */
+  compact?: boolean;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }) {
-  const seed = useSeed(title);
-  const fg = kind === 'primary' ? colors.onInk : kind === 'danger' ? colors.alert : colors.ink;
+  const filled = kind !== 'secondary';
+  const fg = filled ? colors.onInk : colors.ink;
   const inactive = disabled || loading;
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
       onPress={onPress}
       disabled={inactive}
       haptics="light"
-      style={[styles.button, kind === 'primary' && { backgroundColor: colors.ink }, { opacity: inactive ? 0.5 : 1 }, style]}>
-      {(kind === 'secondary' || kind === 'danger') && <SketchFrame seed={seed} opacity={kind === 'danger' ? 0.7 : 1} />}
+      style={[
+        styles.button,
+        compact && { minHeight: 48 },
+        kind === 'primary' && { backgroundColor: colors.ink },
+        kind === 'danger' && { backgroundColor: colors.alert },
+        kind === 'secondary' && { borderWidth: 1, borderColor: colors.ink },
+        { opacity: disabled ? 0.4 : 1 },
+        style,
+      ]}>
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
         <>
-          {icon && <Ionicons name={icon} size={19} color={fg} />}
-          <AppText weight="medium" color={fg}>
+          {icon && <Icon name={icon} size={20} color={fg} strokeWidth={1.5} />}
+          <AppText weight="medium" color={fg} style={compact && { fontSize: 14 }}>
             {title}
           </AppText>
         </>
@@ -242,131 +280,315 @@ export function Button({
   );
 }
 
-/** An underlined text link. */
-export function TextLink({ label, onPress, muted }: { label: string; onPress: () => void; muted?: boolean }) {
+/** An underlined text link (15, or 13 beside a section title). */
+export function TextLink({
+  label,
+  onPress,
+  small,
+  danger,
+  muted,
+  style,
+}: {
+  label: string;
+  onPress: () => void;
+  small?: boolean;
+  danger?: boolean;
+  muted?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
   return (
-    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="link" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}>
-      <AppText variant="caption" muted={muted} style={{ textDecorationLine: 'underline', fontSize: 14 }}>
+    <Pressable
+      onPress={onPress}
+      hitSlop={small ? 12 : 8}
+      accessibilityRole="link"
+      style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, minHeight: small ? undefined : 44, justifyContent: 'center' }, style]}>
+      <AppText
+        variant={small ? 'caption' : 'body'}
+        color={danger ? colors.alert : muted ? colors.grey : colors.ink}
+        style={{ textDecorationLine: 'underline' }}>
         {label}
       </AppText>
     </Pressable>
   );
 }
 
-export function IconButton({ icon, onPress, label, size = 40 }: { icon: IconName; onPress: () => void; label: string; size?: number }) {
+export function IconButton({
+  icon,
+  onPress,
+  label,
+  size = 44,
+  iconSize = 22,
+  color = colors.ink,
+  style,
+}: {
+  icon: IconName;
+  onPress: () => void;
+  label: string;
+  size?: number;
+  iconSize?: number;
+  color?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
   return (
     <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={6}
-      haptics="light"
-      style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name={icon} size={size * 0.55} color={colors.ink} />
+      hitSlop={4}
+      scaleTo={0.9}
+      style={[{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }, style]}>
+      <Icon name={icon} size={iconSize} color={color} />
     </PressableScale>
   );
 }
 
-/** A choice chip: sketched outline, or an ink plate when picked. */
+/** The tiny padlock beside things that need Xpense Pro. */
+export function LockGlyph({ color = colors.grey }: { color?: string }) {
+  return (
+    <View aria-hidden style={{ width: 8, height: 10 }}>
+      <Icon name="lock" size={10} color={color} strokeWidth={2.4} />
+    </View>
+  );
+}
+
+/** "PRO", boxed in mono. */
+export function ProTag({ light }: { light?: boolean }) {
+  const c = light ? colors.onInk : colors.ink;
+  return (
+    <View style={{ borderWidth: 1, borderColor: c, paddingHorizontal: 6, paddingVertical: 1 }}>
+      <AppText variant="axis" color={c} style={{ lineHeight: 14, letterSpacing: 0.8 }}>
+        PRO
+      </AppText>
+    </View>
+  );
+}
+
+/** A colour that eases between two values as `on` changes (180 ms). */
+function useToggleColor(on: boolean) {
+  const moving = useMotion();
+  const p = useSharedValue(on ? 1 : 0);
+  useEffect(() => {
+    p.set(moving ? withTiming(on ? 1 : 0, timing(motion.small)) : on ? 1 : 0);
+  }, [on, moving, p]);
+  return p;
+}
+
+/** A choice chip, 36 high: an outline, or solid ink when picked. */
 export function Chip({
   label,
   selected,
   onPress,
   mark,
   locked,
+  small,
 }: {
   label: string;
   selected?: boolean;
   onPress?: () => void;
-  /** A need/want mark drawn before the label. */
-  mark?: ReactNode;
+  mark?: MarkKind;
   locked?: boolean;
+  small?: boolean;
 }) {
-  const seed = useSeed(label);
+  const p = useToggleColor(!!selected);
+  const box = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(p.value, [0, 1], ['rgba(17,17,17,0)', colors.ink]),
+    borderColor: interpolateColor(p.value, [0, 1], [colors.rule, colors.ink]),
+  }));
+  const text = useAnimatedStyle(() => ({ color: interpolateColor(p.value, [0, 1], [colors.ink, colors.onInk]) }));
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected }}
-      accessibilityLabel={locked ? `${label}, Pro` : label}
+      accessibilityLabel={locked ? `${label}, needs Pro` : label}
       onPress={onPress}
       haptics="select"
-      style={[styles.chip, selected && { backgroundColor: colors.ink }]}>
-      {!selected && <SketchFrame seed={seed} twice={false} />}
-      {mark}
-      <AppText variant="caption" weight="medium" color={selected ? colors.onInk : colors.ink} style={{ fontSize: 14 }}>
-        {label}
-      </AppText>
-      {locked && <ProTag light={selected} />}
+      style={[styles.chip, box]}>
+      {locked && <LockGlyph color={selected ? colors.onInk : colors.grey} />}
+      {mark && <Mark kind={mark} size={8} color={selected ? colors.onInk : colors.ink} ground={selected ? colors.ink : colors.page} />}
+      <Animated.Text style={[typeScale.body, { fontSize: small ? 13 : 14, lineHeight: 18 }, text]}>{label}</Animated.Text>
     </PressableScale>
   );
 }
 
-/** "pro", pencilled next to things that need Xpense Pro. */
-export function ProTag({ light }: { light?: boolean }) {
-  return (
-    <AppText variant="note" color={light ? colors.onInk : colors.graphite} style={{ fontSize: 17, lineHeight: 18 }}>
-      pro
-    </AppText>
-  );
-}
-
-/** Text tabs with a scribbled underline under the chosen one (periods, expense/income). */
+/**
+ * Text tabs. The chosen one is ink with a 2 px underline that slides over (180 ms); `size="lg"` is the
+ * big Expense / Income switch at the top of the Tracker.
+ */
 export function TextTabs<T extends string>({
   options,
   value,
   onChange,
   locked = [],
   size = 'sm',
+  style,
 }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
   locked?: T[];
   size?: 'sm' | 'lg';
+  style?: StyleProp<ViewStyle>;
 }) {
-  const [widths, setWidths] = useState<Record<string, number>>({});
+  const moving = useMotion();
+  const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
+  const x = useSharedValue(0);
+  const w = useSharedValue(0);
   const big = size === 'lg';
+  const current = layouts[value];
+
+  useEffect(() => {
+    if (!current) return;
+    const first = w.value === 0;
+    x.set(moving && !first ? withTiming(current.x, timing(motion.small)) : current.x);
+    w.set(moving && !first ? withTiming(current.w, timing(motion.small)) : current.w);
+  }, [current, moving, x, w]);
+
+  const underline = useAnimatedStyle(() => ({ width: w.value, transform: [{ translateX: x.value }] }));
+
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: big ? 26 : 22, rowGap: space.md }} accessibilityRole="tablist">
+    <View style={[styles.tabs, { gap: big ? 28 : 24 }, style]} accessibilityRole="tablist">
       {options.map((o) => {
         const active = o.value === value;
+        const isLocked = locked.includes(o.value);
         return (
           <Pressable
             key={o.value}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            accessibilityLabel={locked.includes(o.value) ? `${o.label}, Pro` : o.label}
-            hitSlop={8}
+            accessibilityLabel={isLocked ? `${o.label}, needs Pro` : o.label}
+            hitSlop={{ left: 8, right: 8 }}
+            onLayout={(e: LayoutChangeEvent) => {
+              const { x: lx, width } = e.nativeEvent.layout;
+              setLayouts((cur) => (cur[o.value]?.x === lx && cur[o.value]?.w === width ? cur : { ...cur, [o.value]: { x: lx, w: width } }));
+            }}
             onPress={() => {
               if (!active) haptic('select');
               onChange(o.value);
             }}
-            style={{ paddingBottom: 6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 2 }}>
-              <Text
-                onLayout={(e: LayoutChangeEvent) => {
-                  const w = Math.round(e.nativeEvent.layout.width);
-                  if (widths[o.value] !== w) setWidths((cur) => ({ ...cur, [o.value]: w }));
-                }}
-                style={
-                  big
-                    ? { fontFamily: fonts.serif, fontSize: 34, lineHeight: 38, color: active ? colors.ink : colors.pencil }
-                    : { fontFamily: active ? fonts.semibold : fonts.regular, fontSize: 15, lineHeight: 20, color: active ? colors.ink : colors.graphite }
-                }>
-                {o.label}
-              </Text>
-              {locked.includes(o.value) && <ProTag />}
-            </View>
-            {active && widths[o.value] ? <Scribble width={widths[o.value]} style={{ position: 'absolute', bottom: big ? -4 : 0 }} /> : null}
+            style={{ height: big ? 52 : 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {isLocked && <LockGlyph />}
+            <Text
+              style={
+                big
+                  ? { fontFamily: fonts.light, fontSize: 28, letterSpacing: -0.84, color: active ? colors.ink : colors.grey }
+                  : { fontFamily: active ? fonts.medium : fonts.regular, fontSize: 14, color: active ? colors.ink : colors.grey }
+              }>
+              {o.label}
+            </Text>
           </Pressable>
         );
       })}
+      <Animated.View pointerEvents="none" style={[styles.tabLine, underline]} />
     </View>
   );
 }
 
-/** Ink switch. react-native-web colours the "on" thumb with its own prop. */
-export function Toggle({
+type SegmentOption<T> = { value: T; label: string; mark?: MarkKind; detail?: string };
+
+/**
+ * A two-part switch inside an ink outline. The ink block slides under the chosen half (180 ms) and the
+ * labels above it turn white as it passes. With `detail` lines it becomes the Tracker's need/want cards.
+ */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+  compact,
+  height,
+  style,
+}: {
+  options: [SegmentOption<T>, SegmentOption<T>];
+  value: T;
+  onChange: (v: T) => void;
+  label: string;
+  /** 30 high with 12 text: the Need | Want switch on a receipt line. */
+  compact?: boolean;
+  /** Overall height, when it sits beside a field (40). */
+  height?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const moving = useMotion();
+  const [width, setWidth] = useState(0);
+  const index = options[1].value === value ? 1 : 0;
+  const p = useSharedValue(index);
+  useEffect(() => {
+    p.set(moving ? withTiming(index, timing(motion.small)) : index);
+  }, [index, moving, p]);
+  const half = width / 2;
+  const block = useAnimatedStyle(() => ({ transform: [{ translateX: p.value * half }] }));
+  const counter = useAnimatedStyle(() => ({ transform: [{ translateX: -p.value * half }] }));
+  const tall = options.some((o) => o.detail);
+
+  const labels = (onInk: boolean) => (
+    <View style={{ flexDirection: 'row', width: width || undefined, flex: width ? undefined : 1 }}>
+      {options.map((o, i) => (
+        <View
+          key={o.value}
+          style={[
+            tall ? styles.segTall : compact ? styles.segCompact : styles.segShort,
+            height ? { height: height - 2 } : null,
+            { flex: 1 },
+            i === 0 && tall && { borderRightWidth: 1, borderRightColor: colors.ink },
+          ]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {o.mark && (
+              <Mark
+                kind={o.mark}
+                size={tall ? 10 : 8}
+                color={onInk ? colors.onInk : colors.ink}
+                ground={onInk ? colors.ink : colors.page}
+              />
+            )}
+            <AppText weight={compact ? 'regular' : 'medium'} color={onInk ? colors.onInk : colors.ink} style={{ fontSize: tall ? 15 : compact ? 12 : 14, lineHeight: compact ? 16 : 20 }}>
+              {o.label}
+            </AppText>
+          </View>
+          {o.detail && (
+            <AppText variant="small" color={onInk ? colors.rule : colors.grey} style={{ marginTop: 4 }}>
+              {o.detail}
+            </AppText>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+
+  return (
+    <View
+      style={[styles.segmented, style]}
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width - 2)}
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}>
+      {labels(false)}
+      {width > 0 && (
+        <Animated.View pointerEvents="none" style={[styles.segBlock, { width: half }, block]}>
+          <Animated.View style={[{ width }, counter]}>{labels(true)}</Animated.View>
+        </Animated.View>
+      )}
+      <View style={StyleSheet.absoluteFill}>
+        <View style={{ flexDirection: 'row', flex: 1 }}>
+          {options.map((o) => (
+            <Pressable
+              key={o.value}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: o.value === value }}
+              accessibilityLabel={o.detail ? `${o.label}: ${o.detail}` : o.label}
+              onPress={() => {
+                if (o.value !== value) haptic('light');
+                onChange(o.value);
+              }}
+              style={{ flex: 1 }}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** Square switch, 48 × 28, like a light switch. The knob slides and the track turns ink (180 ms). */
+export function Switch({
   value,
   onValueChange,
   label,
@@ -377,33 +599,51 @@ export function Toggle({
   label: string;
   disabled?: boolean;
 }) {
-  const web = Platform.OS === 'web' ? ({ activeThumbColor: '#FFFFFF' } as object) : null;
+  const moving = useMotion();
+  const p = useSharedValue(value ? 1 : 0);
+  useEffect(() => {
+    p.set(moving ? withTiming(value ? 1 : 0, timing(motion.small)) : value ? 1 : 0);
+  }, [value, moving, p]);
+  const track = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(p.value, [0, 1], [colors.page, colors.ink]) }));
+  const knob = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(p.value, [0, 1], [colors.rule, colors.page]),
+    transform: [{ translateX: p.value * 20 }],
+  }));
   return (
-    <Switch
-      value={value}
-      onValueChange={onValueChange}
-      disabled={disabled}
-      trackColor={{ true: colors.ink, false: colors.sand }}
-      thumbColor="#FFFFFF"
-      ios_backgroundColor={colors.sand}
+    <Pressable
+      accessibilityRole="switch"
       accessibilityLabel={label}
-      {...web}
-    />
+      accessibilityState={{ checked: value, disabled }}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={() => {
+        haptic('light');
+        onValueChange(!value);
+      }}
+      style={{ opacity: disabled ? 0.4 : 1 }}>
+      <Animated.View style={[styles.switchTrack, track]}>
+        <Animated.View style={[styles.switchKnob, knob]} />
+      </Animated.View>
+    </Pressable>
   );
 }
 
-/** A field is a label and an ink underline, like writing on a line. */
+/** A field is a label and a line to write on. The line thickens from the left when you type in it. */
 export function Field({
   label,
   hint,
+  error,
+  prefix,
   right,
-  big,
   style,
   onFocus,
   onBlur,
   ...rest
-}: TextInputProps & { label?: string; hint?: string; right?: ReactNode; big?: boolean }) {
-  const [focused, setFocused] = useState(false);
+}: TextInputProps & { label?: string; hint?: string; error?: string | null; prefix?: string; right?: ReactNode }) {
+  const moving = useMotion();
+  const focus = useSharedValue(0);
+  const line = useAnimatedStyle(() => (moving ? { transform: [{ scaleX: focus.value }] } : { opacity: focus.value }));
+  const lineColor = error ? colors.alert : colors.ink;
   return (
     <View style={{ gap: 4 }}>
       {label && (
@@ -411,84 +651,123 @@ export function Field({
           {label}
         </AppText>
       )}
-      <View style={[styles.inputWrap, { borderBottomColor: colors.ink, borderBottomWidth: focused ? 2 : 1.4 }]}>
+      <View style={[styles.inputWrap, { borderBottomColor: lineColor }]}>
+        {prefix && <AppText style={{ fontSize: 17, color: colors.grey }}>{prefix}</AppText>}
         <TextInput
-          placeholderTextColor={colors.pencil}
-          style={[styles.input, big && { fontFamily: fonts.serif, fontSize: 30 }, { color: colors.ink }, style]}
+          placeholderTextColor={colors.grey}
+          style={[styles.input, style]}
+          accessibilityLabel={rest.accessibilityLabel ?? label}
           onFocus={(e) => {
-            setFocused(true);
+            focus.set(withTiming(1, timing(motion.small)));
             onFocus?.(e);
           }}
           onBlur={(e) => {
-            setFocused(false);
+            focus.set(withTiming(0, timing(motion.small)));
             onBlur?.(e);
           }}
           {...rest}
         />
         {right}
+        <Animated.View pointerEvents="none" style={[styles.focusLine, { backgroundColor: lineColor }, line]} />
       </View>
-      {hint && (
-        <AppText variant="caption" faint>
+      {error ? (
+        <AppText variant="caption" color={colors.alert} accessibilityLiveRegion="polite">
+          {error}
+        </AppText>
+      ) : hint ? (
+        <AppText variant="caption" muted style={{ marginTop: 4 }}>
           {hint}
         </AppText>
-      )}
+      ) : null}
     </View>
   );
 }
 
-/** A short message in a sketched box. Danger text is the only red in the app. */
-export function Banner({ tone = 'info', children }: { tone?: 'info' | 'warn' | 'danger' | 'success'; children: ReactNode }) {
-  const seed = useSeed();
-  const danger = tone === 'danger';
+/**
+ * A big amount to type: a grey "$" and light figures on an ink line. 72 in the Tracker, 64 in sheets.
+ */
+export function AmountField({
+  symbol,
+  size = 72,
+  style,
+  ...rest
+}: TextInputProps & { symbol: string; size?: number }) {
   return (
-    <View style={styles.banner} accessibilityRole={danger ? 'alert' : undefined}>
-      <PageFill color={danger ? colors.alertSoft : colors.page} />
-      <SketchFrame seed={seed} twice={false} opacity={danger ? 0.6 : 0.8} />
-      <Ionicons
-        name={danger ? 'alert-circle-outline' : tone === 'success' ? 'checkmark-circle-outline' : 'information-circle-outline'}
-        size={19}
-        color={danger ? colors.alert : colors.ink}
-      />
-      <AppText variant="caption" color={danger ? colors.alert : colors.ink} style={{ flex: 1, fontSize: 14, lineHeight: 20 }}>
-        {children}
+    <View style={[styles.amountWrap, style as StyleProp<ViewStyle>]}>
+      <AppText aria-hidden style={{ fontFamily: fonts.light, fontSize: size * 0.47, lineHeight: size * 0.6, color: colors.grey }}>
+        {symbol}
       </AppText>
+      <TextInput
+        placeholder="0"
+        placeholderTextColor={colors.rule}
+        inputMode="decimal"
+        keyboardType="decimal-pad"
+        style={[
+          styles.amountInput,
+          { fontSize: size, lineHeight: size * 1.06, letterSpacing: -size * 0.05, height: size * 1.1 } as TextStyle,
+        ]}
+        {...rest}
+      />
     </View>
   );
 }
 
-/** A small outlined tag, e.g. "Scanned" or "Need". */
-export function Pill({ label, mark }: { label: string; mark?: ReactNode }) {
+/** A short message in a white box. Alert is only for errors. */
+export function Notice({ tone = 'info', children, style }: { tone?: 'info' | 'alert'; children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const alert = tone === 'alert';
+  const c = alert ? colors.alert : colors.ink;
   return (
-    <View style={styles.pill}>
-      {mark}
-      <AppText variant="caption" weight="medium" style={{ fontSize: 13 }}>
-        {label}
+    <View style={[styles.notice, { borderColor: alert ? colors.alert : colors.rule }, style]} accessibilityRole={alert ? 'alert' : undefined}>
+      <View style={{ marginTop: 1 }}>
+        <Icon name={alert ? 'alert' : 'info'} size={18} color={c} />
+      </View>
+      <View style={{ flex: 1 }}>
+        {typeof children === 'string' ? (
+          <AppText color={c} style={{ fontSize: 14, lineHeight: 20 }}>
+            {children}
+          </AppText>
+        ) : (
+          children
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** The person's initial in a thin circle. */
+export function Avatar({ name, size = 44 }: { name: string; size?: number }) {
+  return (
+    <View
+      aria-hidden
+      style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 1, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+      <AppText weight={size > 48 ? 'light' : 'regular'} style={{ fontSize: size > 48 ? 22 : 15, lineHeight: size > 48 ? 26 : 20 }}>
+        {(name.trim()[0] ?? '·').toUpperCase()}
       </AppText>
     </View>
   );
 }
 
 export function EmptyState({
-  illustration,
+  picture,
   title,
   body,
   action,
 }: {
-  illustration?: ReactNode;
+  picture?: ReactNode;
   title: string;
   body: string;
   action?: ReactNode;
 }) {
   return (
     <View style={styles.empty}>
-      {illustration}
-      <AppText variant="title" center>
+      {picture}
+      <AppText variant="title" center style={{ marginTop: picture ? 28 : 0 }}>
         {title}
       </AppText>
-      <AppText muted center>
+      <AppText muted center style={{ marginTop: 8, maxWidth: 320 }}>
         {body}
       </AppText>
-      {action}
+      {action && <View style={{ marginTop: 12 }}>{action}</View>}
     </View>
   );
 }
@@ -501,68 +780,115 @@ export function Row({ children, style, ...rest }: ViewProps) {
   );
 }
 
-export function Divider({ seed }: { seed?: number }) {
-  return <SketchRule seed={seed ?? 7} opacity={0.2} />;
-}
-
-/** A settings-style row: optional ink icon, title, subtitle, and a trailing accessory or chevron. */
+/**
+ * A settings-style row on a light line: a title (and optional line under it), then a switch, a value or
+ * a chevron. `external` shows the leave-the-app arrow instead.
+ */
 export function ListRow({
-  icon,
   title,
   subtitle,
+  over,
   right,
   onPress,
+  external,
   destructive,
+  tag,
 }: {
-  icon?: IconName;
   title: string;
   subtitle?: string;
+  /** A small grey label above the title ("Saving for"). */
+  over?: string;
   right?: ReactNode;
   onPress?: () => void;
+  external?: boolean;
   destructive?: boolean;
+  tag?: ReactNode;
 }) {
-  const fg = destructive ? colors.alert : colors.ink;
   const content = (
-    <View style={styles.listRow}>
-      {icon && <Ionicons name={icon} size={21} color={fg} />}
+    <View style={[styles.listRow, { minHeight: subtitle || over ? 60 : 52 }]}>
       <View style={{ flex: 1, gap: 1 }}>
-        <AppText color={fg}>{title}</AppText>
+        {over && (
+          <AppText variant="caption" muted>
+            {over}
+          </AppText>
+        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <AppText color={destructive ? colors.alert : colors.ink} style={{ flexShrink: 1 }}>
+            {title}
+          </AppText>
+          {tag}
+        </View>
         {subtitle && (
-          <AppText variant="caption" faint>
+          <AppText variant="caption" muted>
             {subtitle}
           </AppText>
         )}
       </View>
-      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={colors.pencil} /> : null)}
+      {right ?? (onPress ? <Icon name={external ? 'external' : 'chevron'} size={16} strokeWidth={1.5} /> : null)}
     </View>
   );
   if (!onPress) return content;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole={external ? 'link' : 'button'}
+      accessibilityLabel={subtitle ? `${over ? `${over}: ` : ''}${title}, ${subtitle}` : over ? `${over}: ${title}` : title}
+      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
       {content}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { paddingHorizontal: 24, paddingTop: space.lg, gap: 20, paddingBottom: 120, flexGrow: 1 },
-  readable: { width: '100%', maxWidth: READABLE_MAX + 48, alignSelf: 'center' },
-  card: { padding: 20, gap: space.md },
-  sectionTitle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: space.xs },
+  screen: { paddingBottom: 48, flexGrow: 1 },
+  readable: { width: '100%', maxWidth: READABLE_MAX + 2 * WIDE_MARGIN, alignSelf: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md },
+  topBar: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: space.md },
   button: {
     minHeight: 52,
-    borderRadius: 2,
     paddingHorizontal: space.xl,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, minHeight: 38, borderRadius: 2 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  input: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 17, fontFamily: fonts.regular, paddingVertical: 6, paddingHorizontal: 0, outlineStyle: 'solid', outlineWidth: 0 },
-  banner: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 14 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 999, borderWidth: 1.2, borderColor: colors.ink, paddingHorizontal: 12, paddingVertical: 5, alignSelf: 'flex-start' },
-  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.lg, paddingHorizontal: space.lg },
-  listRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 36, borderWidth: 1 },
+  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.rule },
+  tabLine: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.ink },
+  segmented: { flexDirection: 'row', borderWidth: 1, borderColor: colors.ink, backgroundColor: colors.page, overflow: 'hidden' },
+  segShort: { height: 42, alignItems: 'center', justifyContent: 'center' },
+  segCompact: { height: 28, alignItems: 'center', justifyContent: 'center' },
+  segTall: { padding: 14, justifyContent: 'flex-start' },
+  segBlock: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.ink, overflow: 'hidden' },
+  switchTrack: { width: 48, height: 28, borderWidth: 1, borderColor: colors.ink },
+  switchKnob: { position: 'absolute', top: 2, left: 2, width: 22, height: 22 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, borderBottomWidth: 1 },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    height: 44,
+    fontSize: 17,
+    fontFamily: fonts.regular,
+    color: colors.ink,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    outlineStyle: 'solid',
+    outlineWidth: 0,
+  },
+  focusLine: { position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, transformOrigin: 'left center' },
+  amountWrap: { flexDirection: 'row', alignItems: 'baseline', gap: 6, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.ink },
+  amountInput: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: fonts.extralight,
+    color: colors.ink,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    outlineStyle: 'solid',
+    outlineWidth: 0,
+  },
+  notice: { flexDirection: 'row', gap: 12, paddingVertical: 14, paddingHorizontal: 16, backgroundColor: colors.page, borderWidth: 1 },
+  empty: { alignItems: 'center', paddingVertical: space.xl, paddingHorizontal: space.lg },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.line },
 });

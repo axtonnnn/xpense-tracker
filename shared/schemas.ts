@@ -77,6 +77,8 @@ export const BudgetContextSchema = z.object({
   savings_goal: z.number().nullable(),
   saving_for: z.string().max(60).nullable().describe('What they are saving up for, in their own words'),
   wants_so_far: z.number().describe('Spent on wants so far this month'),
+  goal_saved: z.number().nullable().optional().describe('Saved so far towards what they are saving for'),
+  goal_target: z.number().nullable().optional().describe('What it costs'),
 });
 export type BudgetContext = z.infer<typeof BudgetContextSchema>;
 

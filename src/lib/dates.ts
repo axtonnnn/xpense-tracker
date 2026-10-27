@@ -70,3 +70,18 @@ export function formatDay(iso: string, opts: Intl.DateTimeFormatOptions = { week
 export function formatMonth(iso: string): string {
   return parseISODate(iso).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
+
+/** "Today, Sunday 25", "Yesterday, Saturday 24", "Friday 23": headings over a day's entries. */
+export function dayHeading(iso: string, now = today()): string {
+  const day = `${formatDay(iso, { weekday: 'long' })} ${parseISODate(iso).getDate()}`;
+  if (iso === now) return `Today, ${day}`;
+  if (iso === addDays(now, -1)) return `Yesterday, ${day}`;
+  return day;
+}
+
+/** 1st, 2nd, 3rd, 28th. */
+export function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+}

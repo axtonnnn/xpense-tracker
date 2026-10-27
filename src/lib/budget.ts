@@ -8,6 +8,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from './dates';
+import { savingsEffect, type Moves } from './goal';
 import { upcomingOccurrences, type RecurringRule } from './recurring';
 
 export type MoneyTx = {
@@ -137,16 +138,24 @@ export type SafeToSpend = {
   perDay: number;
   daysLeft: number;
   income: number;
-  /** What the month allows for spending: income minus the savings goal. */
+  /** What the month allows for spending: income minus what goes to savings. */
   budget: number;
   upcomingBills: number;
+  /** Spent so far this month, split into needs and wants. */
+  need: number;
+  want: number;
+  /** What goes to savings this month: the set-aside, plus any extra added, minus any taken out. */
+  savings: number;
+  /** True while no pay has come in yet and the month runs on the expected pay. */
+  fromExpected: boolean;
   status: SafeStatus;
 };
 
 /**
- * What you can still spend this month without touching your savings goal or upcoming bills:
- * income − savings goal − spent − bills still due this month. Income is what has come in plus the
- * repeating paychecks still due this month, or the expected monthly income if that is higher.
+ * What you can still spend this month without touching your savings or upcoming bills:
+ * income − set-aside − spent − bills still due this month − savings added beyond the set-aside
+ * + savings taken out. Income is what has come in plus the repeating paychecks still due this month, or
+ * the expected monthly income if that is higher.
  */
 export function safeToSpend(input: {
   today: string;
@@ -154,6 +163,8 @@ export function safeToSpend(input: {
   expectedIncomeCents: number;
   savingsGoalCents: number;
   recurring: (RecurringRule & { type: 'expense' | 'income' })[];
+  /** This month's money moved into and out of the savings goal (see src/lib/goal.ts). */
+  savingsMoves?: Moves;
 }): SafeToSpend {
   const start = startOfMonth(input.today);
   const end = endOfMonth(input.today);
@@ -165,17 +176,33 @@ export function safeToSpend(input: {
     if (r.type === 'expense') upcomingBills += due;
     else upcomingIncome += due;
   }
-  const income = Math.max(t.income + upcomingIncome, input.expectedIncomeCents);
-  const amount = income - input.savingsGoalCents - t.spent - upcomingBills;
+  const known = t.income + upcomingIncome;
+  const income = Math.max(known, input.expectedIncomeCents);
+  const setAside = Math.max(0, input.savingsGoalCents);
+  const effect = input.savingsMoves ? savingsEffect(input.savingsMoves, setAside) : 0;
+  const savings = Math.max(0, setAside - effect);
+  const amount = income - setAside - t.spent - upcomingBills + effect;
   const daysLeft = diffDays(input.today, end) + 1;
   const perDay = amount > 0 ? Math.floor(amount / daysLeft) : 0;
-  const budget = income - input.savingsGoalCents;
+  const budget = income - setAside + effect;
   let status: SafeStatus;
   if (income <= 0) status = 'unset';
   else if (amount < 0) status = 'over';
   else if (amount < budget * 0.2) status = 'tight';
   else status = 'safe';
-  return { amount, perDay, daysLeft, income, budget, upcomingBills, status };
+  return {
+    amount,
+    perDay,
+    daysLeft,
+    income,
+    budget,
+    upcomingBills,
+    need: t.need,
+    want: t.want,
+    savings,
+    fromExpected: t.income === 0 && income > 0,
+    status,
+  };
 }
 
 /**
@@ -225,4 +252,36 @@ export function hourlyRateCents(monthlyIncomeCents: number, hoursPerWeek: number
 export function hoursOfWork(priceCents: number, hourlyCents: number | null): number | null {
   if (!hourlyCents || hourlyCents <= 0) return null;
   return priceCents / hourlyCents;
+}
+
+/** Pay still expected in each bucket from repeating income (after today), for the chart's dashed rings. */
+export function plannedIncome(buckets: Bucket[], rules: (RecurringRule & { type: 'expense' | 'income' })[], today: string): number[] {
+  return buckets.map((b) => {
+    if (b.end <= today) return 0;
+    const after = b.start > today ? addDays(b.start, -1) : today;
+    let sum = 0;
+    for (const r of rules) if (r.type === 'income') sum += upcomingOccurrences(r, after, b.end).length * r.amount_cents;
+    return sum;
+  });
+}
+
+/** The soonest repeating bill (or paycheck) from today until `until` (the end of this month by default). */
+export function nextDue<R extends RecurringRule & { type: 'expense' | 'income' }>(
+  rules: R[],
+  today: string,
+  type: 'expense' | 'income' = 'expense',
+  until = endOfMonth(today),
+): { rule: R; on: string } | null {
+  let best: { rule: R; on: string } | null = null;
+  for (const r of rules) {
+    if (r.type !== type) continue;
+    const on = upcomingOccurrences(r, addDays(today, -1), until, 5)[0];
+    if (on && (!best || on < best.on)) best = { rule: r, on };
+  }
+  return best;
+}
+
+/** The next repeating bill still to come this month, if any. */
+export function nextBill<R extends RecurringRule & { type: 'expense' | 'income' }>(rules: R[], today: string): { rule: R; on: string } | null {
+  return nextDue(rules, today, 'expense');
 }

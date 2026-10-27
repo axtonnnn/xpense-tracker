@@ -88,6 +88,22 @@ export async function deleteRecurring(db: SQLiteDatabase, id: string): Promise<v
   notifyChange();
 }
 
+/** Takes back a repeat that was just added: the rule and the entries it booked, on every device. */
+export async function removeRecurringAndEntries(db: SQLiteDatabase, id: string): Promise<void> {
+  await inTransaction(db, async () => {
+    const booked = await db.getAllAsync<{ id: string }>('SELECT id FROM transactions WHERE recurring_id = ?', id);
+    await db.runAsync('DELETE FROM transactions WHERE recurring_id = ?', id);
+    await recordDeletions(
+      db,
+      'transaction',
+      booked.map((b) => b.id),
+    );
+    await db.runAsync('DELETE FROM recurring WHERE id = ?', id);
+    await recordDeletions(db, 'recurring', [id]);
+  });
+  notifyChange();
+}
+
 /** Books every due salary/bill as a transaction. Safe to call on every app start, even concurrently. */
 export async function applyDueRecurring(db: SQLiteDatabase, today: string, currency: string): Promise<number> {
   let booked = 0;

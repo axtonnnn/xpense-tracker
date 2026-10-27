@@ -3,13 +3,13 @@
 -- Paste this whole file into Supabase → SQL Editor → New query, and press Run. It is safe to run again.
 --
 -- One table holds everything an account syncs (entries, receipts and their lines, repeating bills and
--- paychecks, settings) as JSON, one row per record. Row-level security means a signed-in person can only
--- ever read or change their own rows. Deleting an account (Settings → Delete account in the app) deletes
--- the sign-in, and with it every row here (on delete cascade).
+-- paychecks, the savings goal and its deposits, settings) as JSON, one row per record. Row-level security
+-- means a signed-in person can only ever read or change their own rows. Deleting an account (Settings →
+-- Delete account in the app) deletes the sign-in, and with it every row here (on delete cascade).
 
 create table if not exists public.records (
   user_id uuid not null references auth.users (id) on delete cascade,
-  kind text not null check (kind in ('setting', 'recurring', 'receipt', 'receipt_item', 'transaction')),
+  kind text not null,
   id text not null check (char_length(id) between 1 and 200),
   data jsonb check (data is null or pg_column_size(data) < 32000),
   deleted boolean not null default false,
@@ -21,6 +21,12 @@ create table if not exists public.records (
 );
 
 create index if not exists records_user_synced on public.records (user_id, synced_at);
+
+-- The kinds of record the app syncs. Replaced on every run, so running this file again after an app
+-- update lets new kinds through (the savings goal arrived after the first release).
+alter table public.records drop constraint if exists records_kind_check;
+alter table public.records add constraint records_kind_check
+  check (kind in ('setting', 'recurring', 'receipt', 'receipt_item', 'transaction', 'goal', 'goal_deposit'));
 
 alter table public.records enable row level security;
 

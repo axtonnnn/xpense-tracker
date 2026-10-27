@@ -21,6 +21,8 @@ export type Settings = {
   devPro: boolean;
   /** Last trial count the AI server reported; null until the first scan. */
   trialRemaining: number | null;
+  /** The last month ("2026-10") whose savings check-in was answered, so it's asked once per month. */
+  goalCheckin: string | null;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customCategories: [],
   devPro: false,
   trialRemaining: null,
+  goalCheckin: null,
 };
 
 type Key =
@@ -51,7 +54,8 @@ type Key =
   | 'custom_categories'
   | 'dev_pro'
   | 'trial_remaining'
-  | 'review_asked';
+  | 'review_asked'
+  | 'goal_checkin';
 
 export async function getSettings(db: SQLiteDatabase): Promise<Settings> {
   const rows = await db.getAllAsync<{ key: Key; value: string }>('SELECT key, value FROM settings');
@@ -74,6 +78,7 @@ export async function getSettings(db: SQLiteDatabase): Promise<Settings> {
     customCategories: parseCustomCategories(m.get('custom_categories')),
     devPro: bool('dev_pro', false),
     trialRemaining: m.has('trial_remaining') ? num('trial_remaining', 0) : null,
+    goalCheckin: m.get('goal_checkin') || null,
   };
 }
 

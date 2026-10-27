@@ -94,6 +94,7 @@ export function checkPrompt(req: CheckRequest): string {
     if (b.hourly_pay !== null) lines.push(`- Pay per hour of work: ${b.hourly_pay}`);
     if (b.savings_goal !== null) lines.push(`- Saving each month: ${b.savings_goal}${b.saving_for ? ` (for ${b.saving_for})` : ''}`);
     else if (b.saving_for) lines.push(`- Saving up for: ${b.saving_for}`);
+    if (b.goal_target) lines.push(`- Saved so far for it: ${b.goal_saved ?? 0} of ${b.goal_target}`);
   }
   return lines.join('\n');
 }

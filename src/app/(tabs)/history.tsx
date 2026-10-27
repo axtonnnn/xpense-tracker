@@ -1,20 +1,22 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, SectionList, View } from 'react-native';
+import { ScrollView, SectionList, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BlankPageSketch } from '@/components/illustrations';
-import { TxRow } from '@/components/money-ui';
-import { AppText, Chip, EmptyState, Field, IconButton, PageTitle, Row, tabular } from '@/components/ui';
+import { EntryDetail } from '@/components/EntryDetail';
+import { Icon } from '@/components/icons';
+import { useEntrance } from '@/components/motion';
+import { DayHeader, TxRow } from '@/components/money-ui';
+import { EmptyPage } from '@/components/pictures';
+import { AppText, Chip, EmptyState, IconButton, TextLink, useMargin } from '@/components/ui';
 import { useLiveQuery } from '@/db/live';
-import { useSettings } from '@/db/settings';
+import { useSettings, type Settings } from '@/db/settings';
 import { listBetween, type Tx } from '@/db/transactions';
 import { totals } from '@/lib/budget';
 import { categoryInfo } from '@/lib/categories';
-import { addDays, addMonths, endOfMonth, formatDay, startOfMonth, today } from '@/lib/dates';
-import { formatMoney } from '@/lib/money';
-import { colors, READABLE_MAX, space } from '@/theme/tokens';
+import { addMonths, dayHeading, endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
+import { formatFigure } from '@/lib/money';
+import { colors, fonts, READABLE_MAX, useWide, WIDE_MARGIN } from '@/theme/tokens';
 
 type Filter = 'all' | 'expense' | 'income' | 'need' | 'want';
 const FILTERS: { value: Filter; label: string }[] = [
@@ -36,25 +38,79 @@ function matches(tx: Tx, filter: Filter, q: string, label: string): boolean {
   return hay.includes(q.toLowerCase());
 }
 
-function dayLabel(day: string): string {
-  const t = today();
-  const short = formatDay(day, { weekday: 'short', day: 'numeric' });
-  if (day === t) return `today, ${short}`;
-  if (day === addDays(t, -1)) return `yesterday, ${short}`;
-  return short;
-}
-
 export default function History() {
-  const insets = useSafeAreaInsets();
   const settings = useSettings();
+  const wide = useWide();
   const [month, setMonth] = useState(startOfMonth(today()));
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string | null>(null);
+
+  if (!settings) return <View style={{ flex: 1, backgroundColor: colors.paper }} />;
+
+  const list = (
+    <HistoryList
+      key={month}
+      month={month}
+      setMonth={setMonth}
+      filter={filter}
+      setFilter={setFilter}
+      query={query}
+      setQuery={setQuery}
+      settings={settings}
+      selected={wide ? selected : null}
+      onOpen={(id) => (wide ? setSelected(id) : router.push({ pathname: '/transaction/[id]', params: { id } }))}
+    />
+  );
+
+  if (!wide) return list;
+  return (
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.paper }}>
+      <View style={styles.listColumn}>{list}</View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.detail} keyboardShouldPersistTaps="handled">
+        {selected ? (
+          <View style={{ width: '100%', maxWidth: READABLE_MAX }}>
+            <EntryDetail key={selected} id={selected} onDone={() => setSelected(null)} />
+          </View>
+        ) : (
+          <EmptyState picture={<EmptyPage />} title="Pick an entry" body="Its details, receipt and need or want lines show here." />
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function HistoryList({
+  month,
+  setMonth,
+  filter,
+  setFilter,
+  query,
+  setQuery,
+  settings,
+  selected,
+  onOpen,
+}: {
+  month: string;
+  setMonth: (m: string) => void;
+  filter: Filter;
+  setFilter: (f: Filter) => void;
+  query: string;
+  setQuery: (q: string) => void;
+  settings: Settings;
+  selected: string | null;
+  onOpen: (id: string) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const margin = useMargin();
+  const wide = useWide();
+  const entrance = useEntrance(14);
   const from = month;
   const to = endOfMonth(month);
   const { data: txs } = useLiveQuery((db) => listBetween(db, from, to), [from, to]);
-  const currency = settings?.currency ?? 'USD';
-  const custom = settings?.customCategories;
+  const currency = settings.currency;
+  const custom = settings.customCategories;
+  const t = today();
 
   const sections = useMemo(() => {
     const byDay = new Map<string, Tx[]>();
@@ -67,15 +123,31 @@ export default function History() {
     return [...byDay.entries()].map(([day, data]) => ({ day, data }));
   }, [txs, filter, query, custom]);
 
+  // Rows are numbered across days, so the fade-in runs down the whole list.
+  const order = useMemo(() => {
+    const m = new Map<string, number>();
+    let i = 0;
+    for (const s of sections) for (const tx of s.data) m.set(tx.id, i++);
+    return m;
+  }, [sections]);
+
   const tot = totals(txs ?? [], from, to);
-  const isCurrentMonth = month === startOfMonth(today());
-  const filtered = query.trim() !== '' || filter !== 'all';
-  const monthName = new Date(`${month}T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: isCurrentMonth ? undefined : 'numeric' });
+  const isCurrentMonth = month === startOfMonth(t);
+  const searching = query.trim() !== '';
+  const filtered = searching || filter !== 'all';
+  const monthName = parseISODate(month).toLocaleDateString(undefined, { month: 'long', year: isCurrentMonth ? undefined : 'numeric' });
 
   return (
     <SectionList
       style={{ flex: 1, backgroundColor: colors.paper }}
-      contentContainerStyle={{ paddingHorizontal: 24, paddingTop: insets.top + space.md, paddingBottom: 120, width: '100%', maxWidth: READABLE_MAX + 48, alignSelf: 'center' }}
+      contentContainerStyle={{
+        paddingHorizontal: wide ? 28 : margin,
+        paddingTop: insets.top + (wide ? 40 : 12),
+        paddingBottom: 48,
+        width: '100%',
+        maxWidth: wide ? undefined : READABLE_MAX + 2 * WIDE_MARGIN,
+        alignSelf: 'center',
+      }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       sections={sections}
@@ -83,84 +155,110 @@ export default function History() {
       stickySectionHeadersEnabled={false}
       showsVerticalScrollIndicator={false}
       ListHeaderComponent={
-        <View style={{ gap: 18, marginBottom: space.xs }}>
-          <PageTitle
-            title="History"
-            right={
-              <Row style={{ gap: 0, marginBottom: 4 }}>
-                <IconButton icon="chevron-back" label="Previous month" size={34} onPress={() => setMonth(addMonths(month, -1, 1))} />
-                <AppText weight="semibold" style={{ fontSize: 15 }}>
-                  {monthName}
-                </AppText>
-                <View style={{ opacity: isCurrentMonth ? 0.25 : 1 }}>
-                  <IconButton icon="chevron-forward" label="Next month" size={34} onPress={() => !isCurrentMonth && setMonth(addMonths(month, 1, 1))} />
-                </View>
-              </Row>
-            }
-          />
-          <Field
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search shops, notes, amounts"
-            clearButtonMode="while-editing"
-            right={<Ionicons name="search" size={18} color={colors.graphite} />}
-          />
-          {/* Bleed to the screen edges so it is obvious the chips scroll. */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -24 }} contentContainerStyle={{ gap: 8, paddingHorizontal: 24 }}>
+        <View style={{ marginBottom: 0 }}>
+          <View style={styles.titleRow}>
+            <AppText variant="display" accessibilityRole="header" style={wide && { fontSize: 48, lineHeight: 50, letterSpacing: -1.92 }}>
+              History
+            </AppText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <IconButton icon="back" label="Previous month" size={40} iconSize={16} onPress={() => setMonth(addMonths(month, -1, 1))} />
+              <AppText weight="medium" accessibilityLiveRegion="polite">
+                {monthName}
+              </AppText>
+              <View style={{ opacity: isCurrentMonth ? 0.3 : 1 }} pointerEvents={isCurrentMonth ? 'none' : 'auto'}>
+                <IconButton icon="chevron" label="Next month" size={40} iconSize={16} onPress={() => setMonth(addMonths(month, 1, 1))} />
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.search, { borderBottomWidth: searching ? 2 : 1 }]}>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search shops, notes, amounts"
+              placeholderTextColor={colors.grey}
+              accessibilityLabel="Search"
+              returnKeyType="search"
+              style={styles.searchInput}
+            />
+            {searching ? (
+              <IconButton icon="close" label="Clear search" size={32} iconSize={16} onPress={() => setQuery('')} />
+            ) : (
+              <Icon name="search" size={18} strokeWidth={1.5} />
+            )}
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -margin, marginTop: 16 }} contentContainerStyle={{ gap: 8, paddingHorizontal: margin }}>
             {FILTERS.map((f) => (
               <Chip key={f.value} label={f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} />
             ))}
           </ScrollView>
-          <Row style={{ gap: 18 }}>
-            <AppText variant="caption" muted>
-              Out{' '}
-              <AppText variant="caption" weight="semibold" style={tabular}>
-                {formatMoney(tot.spent, currency)}
+
+          {(txs?.length ?? 0) > 0 && (
+            <View style={styles.summary}>
+              <AppText variant="caption" muted>
+                Out <AppText variant="monoSmall">{formatFigure(tot.spent, currency)}</AppText>
               </AppText>
-            </AppText>
-            <AppText variant="caption" muted>
-              In{' '}
-              <AppText variant="caption" weight="semibold" style={tabular}>
-                {formatMoney(tot.income, currency)}
+              <AppText variant="caption" muted>
+                In <AppText variant="monoSmall">{formatFigure(tot.income, currency)}</AppText>
               </AppText>
-            </AppText>
-            <AppText variant="caption" muted>
-              {txs?.length ?? 0} {txs?.length === 1 ? 'entry' : 'entries'}
-            </AppText>
-          </Row>
+              <AppText variant="caption" muted>
+                {txs?.length} {txs?.length === 1 ? 'entry' : 'entries'}
+              </AppText>
+            </View>
+          )}
         </View>
       }
       renderSectionHeader={({ section }) => {
-        const net = section.data.reduce((s, t) => s + (t.type === 'income' ? t.amount_cents : -t.amount_cents), 0);
-        return (
-          <Row style={{ justifyContent: 'space-between', alignItems: 'baseline', marginTop: space.md }}>
-            <AppText variant="note" muted style={{ fontSize: 22 }}>
-              {dayLabel(section.day)}
-            </AppText>
-            <AppText variant="note" muted style={[tabular, { fontSize: 19 }]}>
-              {net >= 0 ? '+' : '−'}
-              {formatMoney(Math.abs(net), currency)}
-            </AppText>
-          </Row>
-        );
+        const net = section.data.reduce((s, x) => s + (x.type === 'income' ? x.amount_cents : -x.amount_cents), 0);
+        return <DayHeader label={dayHeading(section.day, t)} total={net} currency={currency} />;
       }}
       renderItem={({ item, index, section }) => (
-        <TxRow
-          tx={item}
-          custom={custom}
-          last={index === section.data.length - 1}
-          onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: item.id } })}
-        />
+        <View style={[index === 0 && { marginTop: 4 }, selected === item.id && styles.picked]}>
+          <TxRow
+            tx={item}
+            custom={custom}
+            delay={entrance(order.get(item.id) ?? 99)}
+            onPress={() => onOpen(item.id)}
+          />
+        </View>
       )}
       ListEmptyComponent={
         txs ? (
           <EmptyState
-            illustration={<BlankPageSketch width={170} />}
-            title={filtered ? 'Nothing matches' : 'A blank page'}
-            body={filtered ? 'Try another search or filter.' : 'Add what you spend in Tracker, or scan a receipt in AI mode.'}
+            picture={<EmptyPage />}
+            title={searching ? `Nothing matches “${query.trim()}”` : filtered ? 'Nothing here' : 'A blank page'}
+            body={
+              searching
+                ? 'Try another word, or look in another month.'
+                : filtered
+                  ? 'Nothing of this kind this month.'
+                  : 'Add what you spend in the Tracker, or scan a receipt in AI mode.'
+            }
+            action={searching ? <TextLink label="Clear search" onPress={() => setQuery('')} /> : undefined}
           />
         ) : undefined
       }
     />
   );
 }
+
+const styles = StyleSheet.create({
+  listColumn: { width: 400, borderRightWidth: 1, borderRightColor: colors.rule },
+  detail: { padding: 40, paddingTop: 56, flexGrow: 1 },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 8 },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20, height: 44, borderBottomColor: colors.ink },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    height: 42,
+    fontSize: 17,
+    fontFamily: fonts.regular,
+    color: colors.ink,
+    padding: 0,
+    outlineStyle: 'solid',
+    outlineWidth: 0,
+  },
+  summary: { flexDirection: 'row', gap: 18, marginTop: 16 },
+  picked: { backgroundColor: colors.page, marginHorizontal: -8, paddingHorizontal: 8 },
+});

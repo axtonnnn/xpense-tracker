@@ -6,7 +6,7 @@ import type { z } from 'zod';
 import { CheckRequestSchema, ReviewRequestSchema, ScanRequestSchema } from '../../shared/schemas';
 import { AIError, createClaude, type AIProvider } from './ai/claude';
 import { checkSupabaseKey, deleteSupabaseUser, userFrom, verifySupabaseToken, type Verify } from './auth';
-import { checkAccess, checkRevenueCatKey, forgetAccount, recordUsage, type Feature } from './entitlement';
+import { checkAccess, checkRevenueCatKey, forgetAccount, recordUsage, trialLimit, type Feature } from './entitlement';
 import type { Env } from './env';
 import { missingSettings, pageResponse } from './pages';
 
@@ -174,8 +174,12 @@ export function createHandler(deps: Deps) {
         if (e instanceof AIError) return errorBody(e.status, e.code, e.message);
         throw e;
       }
-      // Only successful answers count against the trial or the monthly cap.
-      const usage = await recordUsage(env, userId, route.feature, access, when);
+      // Only successful answers count against the trial or the monthly cap; a photo that turned out not
+      // to be a receipt or bill doesn't count either.
+      const unread = route.feature === 'scan' && (result as { is_financial_document?: boolean }).is_financial_document === false;
+      const usage = unread
+        ? { trialRemaining: access.plan === 'trial' ? Math.max(0, trialLimit(env) - access.trialUsed) : null }
+        : await recordUsage(env, userId, route.feature, access, when);
       return route.feature === 'scan' ? { receipt: result, trial_remaining: usage.trialRemaining } : { result };
     }, deps.keepaliveMs ?? KEEPALIVE_MS);
   };

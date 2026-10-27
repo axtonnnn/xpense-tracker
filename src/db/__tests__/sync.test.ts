@@ -2,6 +2,7 @@
 // (last edit wins, deletions are tombstones, every write gets a server timestamp).
 import { describe, expect, it, jest } from '@jest/globals';
 
+import { addDeposit, createGoal, deleteGoal, getActiveGoal, listDeposits } from '../goals';
 import { migrate } from '../migrate';
 import { applyDueRecurring, addRecurring } from '../recurring';
 import { getSettings, setSettings } from '../settings';
@@ -13,7 +14,7 @@ import { nodeDatabase } from '@/test/node-db';
 jest.mock('expo-crypto', () => ({ randomUUID: () => require('node:crypto').randomUUID() }));
 jest.mock('@/lib/files', () => ({ deleteReceiptImage: jest.fn() }));
 
-function fakeServer() {
+function fakeServer({ kinds }: { kinds?: string[] } = {}) {
   const rows = new Map<string, RemoteRecord & { synced_at: string }>();
   let clock = Date.parse('2026-10-25T09:00:00Z');
   const remote: Remote = {
@@ -21,6 +22,8 @@ function fakeServer() {
       return [...rows.values()].filter((r) => !since || r.synced_at > since).sort((a, b) => (a.synced_at < b.synced_at ? -1 : 1));
     },
     async push(records) {
+      // An older schema.sql: the kind check rejects the whole batch.
+      if (kinds && records.some((r) => !kinds.includes(r.kind))) throw new Error('violates check constraint "records_kind_check"');
       for (const r of records) {
         const key = `${r.kind}:${r.id}`;
         const cur = rows.get(key);
@@ -189,5 +192,39 @@ describe('sync between two devices', () => {
     ]);
     expect(got?.receipt?.image_uri).toBeNull();
     expect([got?.tx.need_cents, got?.tx.want_cents]).toEqual([429, 799]);
+  });
+  it('carries the savings goal and its deposits, and deletes them everywhere', async () => {
+    const { remote } = fakeServer();
+    const phone = await device();
+    const ipad = await device();
+    const goalId = await createGoal(phone, { name: 'A laptop', targetCents: 120000, startedOn: '2026-09-20', alreadySavedCents: 12000 });
+    await addDeposit(phone, { goalId, amountCents: 30000, occurredOn: '2026-10-01', note: 'October' });
+    await syncOnce(phone, remote);
+    await syncOnce(ipad, remote);
+    expect((await getActiveGoal(ipad))?.name).toBe('A laptop');
+    expect((await listDeposits(ipad, goalId)).map((d) => [d.kind, d.amount_cents])).toEqual([
+      ['deposit', 30000],
+      ['starting', 12000],
+    ]);
+
+    await deleteGoal(ipad, goalId);
+    await syncOnce(ipad, remote);
+    await syncOnce(phone, remote);
+    expect(await getActiveGoal(phone)).toBeNull();
+    expect(await listDeposits(phone, goalId)).toEqual([]);
+  });
+
+  it('keeps syncing everything else when the server does not take goals yet', async () => {
+    const { remote, rows } = fakeServer({ kinds: ['setting', 'recurring', 'receipt', 'receipt_item', 'transaction'] });
+    const phone = await device();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await createGoal(phone, { name: 'A bike', targetCents: 40000, startedOn: '2026-10-01' });
+    await insertTransaction(phone, expense('Green Valley Market', 5000));
+    await syncOnce(phone, remote);
+    expect([...rows.values()].map((r) => r.kind)).toEqual(['transaction']);
+    // The goal waits on the device for a server that takes it.
+    expect(await pendingChanges(phone)).toBe(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

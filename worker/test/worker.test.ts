@@ -149,6 +149,14 @@ describe('free trial', () => {
     expect(kv.store.get(`trial:${USER}`)).toBeUndefined();
   });
 
+  it('does not use up the trial when the photo is not a receipt', async () => {
+    const { handle, env, kv } = setup({ ai: { scanReceipt: vi.fn(async () => ({ ...receipt, is_financial_document: false, items: [] })) } });
+    const json = await read(await handle(post('/v1/scan', scanBody), env));
+    expect(json.receipt.is_financial_document).toBe(false);
+    expect(json.trial_remaining).toBe(3);
+    expect(kv.store.get(`trial:${USER}`)).toBeUndefined();
+  });
+
   it('keeps buy checks and reviews Pro-only', async () => {
     const { handle, env, ai } = setup();
     const res = await handle(post('/v1/check', checkBody), env);

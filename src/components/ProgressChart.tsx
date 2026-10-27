@@ -1,225 +1,216 @@
-import { useId, useState, type ReactNode } from 'react';
+// The dashboard chart: needs (solid) under wants (hatched) in thin columns on one baseline, with pay as
+// open rings at their height and pay still to come as dashed rings. Columns rise in, 40 ms apart.
+import { useState } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, Defs, G, Line, Path, Pattern, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
-import { IncomeMark, NeedMark, pen, WantMark } from './sketch';
-import { AppText, Label, Row, tabular, TextLink } from './ui';
+import { Hatch, Mark } from './marks';
+import { Appear, Rise } from './motion';
+import { Key } from './money-ui';
+import { AppText, haptic, SectionHeader } from './ui';
 import type { Bucket } from '@/lib/budget';
 import { niceTicks } from '@/lib/chart';
-import { formatAxis, formatMoney } from '@/lib/money';
-import { colors, fonts } from '@/theme/tokens';
+import { formatAxis, formatFigure, formatMoney } from '@/lib/money';
+import { colors, fonts, motion } from '@/theme/tokens';
 
-const PLOT_H = 160;
-const X_AXIS_H = 24;
-const Y_AXIS_W = 40;
-const TOP_PAD = 8;
+const PLOT_H = 170;
+const HEADROOM = 18;
 const MIN_SEG = 2;
 
+export type ChartBucket = Bucket & {
+  /** Pay still expected in this stretch (from repeating income), drawn as a dashed ring. */
+  planned?: number;
+};
+
 type Props = {
-  buckets: Bucket[];
+  index?: string;
+  heading: string;
+  buckets: ChartBucket[];
   currency: string;
   selected: number;
   onSelect: (index: number) => void;
-  /** Connect income markers with a dotted line (only meaningful for monthly buckets). */
-  incomeLine: boolean;
-  /** Heading for the selected bucket, e.g. "Week of 22–28". */
-  title: (b: Bucket) => string;
+  /** Axis label under each column (narrow for 12 months). */
+  label?: (b: ChartBucket) => string;
+  /** The sentence under the chart about the selected column. */
+  readout: (b: ChartBucket) => React.ReactNode;
 };
 
-/** Needs (solid ink) under wants (hatched), with income as open rings, all on one scale. */
-export function ProgressChart({ buckets, currency, selected, onSelect, incomeLine, title }: Props) {
-  const hatchId = `ch${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+export function ProgressChart({ index, heading, buckets, currency, selected, onSelect, label = (b) => b.label, readout }: Props) {
   const [width, setWidth] = useState(0);
-  const [showTable, setShowTable] = useState(false);
-
+  const [table, setTable] = useState(false);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
-  const maxValue = Math.max(0, ...buckets.map((b) => Math.max(b.need + b.want, b.income)));
-  const ticks = niceTicks(maxValue);
-  const top = ticks[ticks.length - 1] || 1;
-  const plotW = Math.max(0, width - Y_AXIS_W);
-  const slot = buckets.length > 0 ? plotW / buckets.length : 0;
-  const barW = Math.min(26, slot * 0.46);
-  const y = (v: number) => TOP_PAD + (PLOT_H - TOP_PAD) * (1 - v / top);
-  const base = y(0);
-  const cx = (i: number) => Y_AXIS_W + slot * i + slot / 2;
-  const empty = maxValue === 0;
-  // Nothing to read out in an empty period: drop the readout and the highlight, keep the axis.
-  const sel = empty ? undefined : buckets[selected];
-  const p = pen(71);
-  const incomePoints = buckets.map((b, i) => ({ x: cx(i), y: y(b.income), v: b.income }));
+  const maxValue = Math.max(0, ...buckets.map((b) => Math.max(b.need + b.want, b.income, b.planned ?? 0)));
+  const ticks = niceTicks(maxValue, 2);
+  const top = Math.max(1, ticks[ticks.length - 1] ?? 1);
+  const scale = (v: number) => ((PLOT_H - HEADROOM) * v) / top;
+  // One dashed guide line, at the middle tick, keeps the chart quiet.
+  const guide = ticks.length > 2 ? ticks[Math.floor((ticks.length - 1) / 2)] : ticks[1];
+  const columns = buckets.length;
+  const barW = columns > 8 ? 12 : 14;
+  const ring = columns > 8 ? 9 : 10;
+  const sel = buckets[selected];
 
   return (
-    <View style={{ gap: 14 }}>
-      <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <Label>{sel ? title(sel) : 'Nothing yet'}</Label>
-        <TextLink label={showTable ? 'Show chart' : 'Show table'} onPress={() => setShowTable((v) => !v)} muted />
-      </Row>
-      {sel && (
-        <Row style={{ gap: 18, flexWrap: 'wrap' }} accessibilityLiveRegion="polite">
-          <Reading mark={<NeedMark size={9} />} value={formatMoney(sel.need, currency)} label="needs" />
-          <Reading mark={<WantMark size={9} />} value={formatMoney(sel.want, currency)} label="wants" />
-          <Reading mark={<IncomeMark size={9} />} value={formatMoney(sel.income, currency, { compact: sel.income >= 100000 })} label="in" />
-        </Row>
-      )}
+    <View>
+      <SectionHeader index={index} title={heading} action={{ label: table ? 'Chart' : 'Table', onPress: () => setTable((v) => !v) }} />
+      <View style={styles.keys}>
+        <Key kind="need" label="Needs" />
+        <Key kind="want" label="Wants" />
+        <Key kind="income" label="Pay" />
+      </View>
 
-      {showTable ? (
-        <ChartTable buckets={buckets} currency={currency} />
+      {table ? (
+        <ChartTable buckets={buckets} currency={currency} label={label} />
       ) : (
-        <View onLayout={onLayout} style={{ height: PLOT_H + X_AXIS_H }}>
-          {width > 0 && (
-            <Svg width={width} height={PLOT_H + X_AXIS_H}>
-              <Defs>
-                <Pattern id={hatchId} patternUnits="userSpaceOnUse" width={4} height={4} patternTransform="rotate(45)">
-                  <Line x1={2} y1={0} x2={2} y2={4} stroke={colors.ink} strokeWidth={1} />
-                </Pattern>
-              </Defs>
-              {sel && (
-                <Rect x={Y_AXIS_W + slot * selected + 3} y={TOP_PAD - 4} width={Math.max(0, slot - 6)} height={PLOT_H - TOP_PAD + 6} fill={colors.paper} />
-              )}
-              {ticks.slice(1).map((t) => (
-                <Path key={`g${t}`} d={p.seg(Y_AXIS_W, y(t), width, y(t), 0.6, 0.5)} stroke={colors.ink} strokeWidth={0.8} opacity={0.18} fill="none" />
-              ))}
-              {ticks.map((t) => (
-                <SvgText key={`t${t}`} x={Y_AXIS_W - 8} y={y(t) + 4} fontSize={11} fontFamily={fonts.regular} fill={colors.pencil} textAnchor="end">
-                  {formatAxis(t, currency)}
-                </SvgText>
-              ))}
-
-              {buckets.map((b, i) => {
-                const x = cx(i) - barW / 2;
-                const needH = b.need > 0 ? Math.max(MIN_SEG, base - y(b.need)) : 0;
-                const totalH = b.need + b.want > 0 ? Math.max(needH, base - y(b.need + b.want)) : 0;
-                const wantH = b.want > 0 ? Math.max(MIN_SEG, totalH - needH) : 0;
-                return (
-                  <G key={`f${b.key}`}>
-                    {needH > 0 && <Rect x={x} y={base - needH} width={barW} height={needH} fill={colors.ink} />}
-                    {wantH > 0 && <Rect x={x} y={base - needH - wantH} width={barW} height={wantH} fill={`url(#${hatchId})`} />}
-                  </G>
-                );
-              })}
-              {buckets.map((b, i) => {
-                const x = cx(i) - barW / 2;
-                const needH = b.need > 0 ? Math.max(MIN_SEG, base - y(b.need)) : 0;
-                const totalH = b.need + b.want > 0 ? Math.max(needH, base - y(b.need + b.want)) : 0;
-                const wantH = b.want > 0 ? Math.max(MIN_SEG, totalH - needH) : 0;
-                const bar = pen(100 + i);
-                return (
-                  <Path
-                    key={b.key}
-                    d={[
-                      needH > 0 ? bar.rect(x, base - needH, barW, needH, 0.8, 0.4) : '',
-                      wantH > 0 ? bar.rect(x, base - needH - wantH, barW, wantH, 0.8, 0.3) : '',
-                    ].join('')}
-                    stroke={colors.ink}
-                    strokeWidth={1.1}
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                );
-              })}
-              <Path d={p.seg(Y_AXIS_W, base, width, base, 1, 0.4)} stroke={colors.ink} strokeWidth={1.3} fill="none" strokeLinecap="round" />
-
-              {incomeLine && incomePoints.some((pt) => pt.v > 0) && (
-                <Polyline
-                  points={incomePoints.map((pt) => `${pt.x},${pt.y}`).join(' ')}
-                  fill="none"
-                  stroke={colors.ink}
-                  strokeWidth={1.4}
-                  strokeDasharray="2 4"
-                  strokeLinecap="round"
-                />
-              )}
-              {incomePoints.map((pt, i) =>
-                pt.v > 0 ? <Circle key={`i${i}`} cx={pt.x} cy={pt.y} r={4.4} fill={colors.page} stroke={colors.ink} strokeWidth={1.3} /> : null,
-              )}
-
-              {buckets.map((b, i) => (
-                <SvgText
-                  key={`x${b.key}`}
-                  x={cx(i)}
-                  y={PLOT_H + 17}
-                  fontSize={11}
-                  fontFamily={sel && i === selected ? fonts.semibold : fonts.regular}
-                  fill={sel && i === selected ? colors.ink : colors.pencil}
-                  textAnchor="middle">
-                  {b.label}
-                </SvgText>
-              ))}
-              {empty && (
-                <SvgText x={Y_AXIS_W + plotW / 2} y={PLOT_H / 2} fontSize={13} fontFamily={fonts.regular} fill={colors.pencil} textAnchor="middle">
-                  Nothing written down for this period yet
-                </SvgText>
-              )}
-            </Svg>
-          )}
-          {/* Hit targets: the whole slot, not just the painted bar. */}
-          <View style={[StyleSheet.absoluteFill, { left: Y_AXIS_W, flexDirection: 'row' }]}>
+        <>
+          <View
+            onLayout={onLayout}
+            style={styles.plot}
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={`${heading}. ${buckets
+              .map((b) => `${b.label}: needs ${formatMoney(b.need, currency)}, wants ${formatMoney(b.want, currency)}${b.income ? `, pay ${formatMoney(b.income, currency)}` : ''}`)
+              .join('. ')}`}>
+            {guide ? (
+              <>
+                <View style={[styles.guide, { bottom: scale(guide) }]} />
+                <AppText variant="axis" muted style={[styles.guideLabel, { bottom: scale(guide) + 2, fontSize: 9 }]}>
+                  {formatAxis(guide, currency).replace(/^[^\d]+/, '')}
+                </AppText>
+              </>
+            ) : null}
+            {width > 0 && (
+              <View style={StyleSheet.absoluteFill}>
+                <View style={{ flex: 1, flexDirection: 'row' }}>
+                  {buckets.map((b, i) => {
+                    const needH = b.need > 0 ? Math.max(MIN_SEG, scale(b.need)) : 0;
+                    const wantH = b.want > 0 ? Math.max(MIN_SEG + 1, scale(b.want)) : 0;
+                    return (
+                      <Pressable
+                        key={b.key}
+                        onPress={() => {
+                          if (i !== selected) haptic('select');
+                          onSelect(i);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: i === selected }}
+                        accessibilityLabel={`${b.label}: needs ${formatMoney(b.need, currency)}, wants ${formatMoney(b.want, currency)}, pay ${formatMoney(b.income, currency)}`}
+                        style={styles.column}>
+                        {i === selected && <View style={[styles.band, { left: columns > 8 ? 3 : 6, right: columns > 8 ? 3 : 6 }]} />}
+                        {(needH > 0 || wantH > 0) && (
+                          <Rise delay={i * motion.columnStagger} style={[styles.bar, { width: barW, height: needH + wantH, marginLeft: -barW / 2 }]}>
+                            {wantH > 0 && (
+                              <View style={{ height: wantH, borderWidth: 1, borderColor: colors.ink, overflow: 'hidden' }}>
+                                <Hatch gap={2.5} />
+                              </View>
+                            )}
+                            {needH > 0 && <View style={{ height: needH, backgroundColor: colors.ink }} />}
+                          </Rise>
+                        )}
+                        {b.income > 0 && (
+                          <Appear delay={i * motion.columnStagger + 300} distance={0} style={[styles.ringAt, { bottom: scale(b.income) - ring / 2, marginLeft: -ring / 2 }]}>
+                            <Ring size={ring} />
+                          </Appear>
+                        )}
+                        {!b.income && (b.planned ?? 0) > 0 && (
+                          <Appear delay={i * motion.columnStagger + 300} distance={0} style={[styles.ringAt, { bottom: scale(b.planned ?? 0) - ring / 2, marginLeft: -ring / 2 }]}>
+                            <Ring size={ring} dashed />
+                          </Appear>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+            <View style={styles.baseline} />
+          </View>
+          <View style={styles.labels} aria-hidden>
             {buckets.map((b, i) => (
-              <Pressable
-                key={`h${b.key}`}
-                style={{ flex: 1 }}
-                onPress={() => onSelect(i)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: i === selected }}
-                accessibilityLabel={`${b.label}: needs ${formatMoney(b.need, currency)}, wants ${formatMoney(b.want, currency)}, income ${formatMoney(
-                  b.income,
-                  currency,
-                )}`}
-              />
+              <AppText
+                key={b.key}
+                variant="axis"
+                center
+                numberOfLines={1}
+                style={{ flex: 1, lineHeight: 14, color: i === selected ? colors.ink : colors.grey, fontFamily: i === selected ? fonts.monoMedium : fonts.mono }}>
+                {label(b)}
+              </AppText>
             ))}
           </View>
-        </View>
+          {sel && (
+            <AppText variant="caption" muted style={{ marginTop: 14 }} accessibilityLiveRegion="polite">
+              {readout(sel)}
+            </AppText>
+          )}
+        </>
       )}
     </View>
   );
 }
 
-function Reading({ mark, value, label }: { mark: ReactNode; value: string; label: string }) {
+function Ring({ size, dashed }: { size: number; dashed?: boolean }) {
   return (
-    <Row style={{ gap: 6 }}>
-      {mark}
-      <AppText variant="caption" muted>
-        <AppText variant="caption" weight="semibold" style={tabular}>
-          {value}
-        </AppText>{' '}
-        {label}
-      </AppText>
-    </Row>
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size,
+        borderWidth: 1.25,
+        borderColor: colors.ink,
+        borderStyle: dashed ? 'dashed' : 'solid',
+        backgroundColor: colors.paper,
+      }}
+    />
   );
 }
 
-function ChartTable({ buckets, currency }: { buckets: Bucket[]; currency: string }) {
-  const cell = { flex: 1, textAlign: 'right' as const, ...tabular };
+function ChartTable({ buckets, currency, label }: { buckets: ChartBucket[]; currency: string; label: (b: ChartBucket) => string }) {
+  const cell = { flex: 1, textAlign: 'right' as const };
   return (
-    <View accessibilityRole="summary">
-      <Row style={styles.tableRow}>
-        <AppText variant="caption" faint style={{ flex: 1.1 }}>
-          Period
+    <View accessibilityRole="summary" style={{ marginTop: 16 }}>
+      <View style={styles.tableRow}>
+        <AppText variant="small" muted style={{ flex: 1 }}>
+          {' '}
         </AppText>
-        {['Needs', 'Wants', 'Income'].map((h) => (
-          <AppText key={h} variant="caption" faint style={cell}>
-            {h}
-          </AppText>
+        {[
+          ['need', 'Needs'],
+          ['want', 'Wants'],
+          ['income', 'Pay'],
+        ].map(([k, h]) => (
+          <View key={k} style={[cell, { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }]}>
+            <Mark kind={k as 'need'} size={8} />
+            <AppText variant="small" muted>
+              {h}
+            </AppText>
+          </View>
         ))}
-      </Row>
+      </View>
       {buckets.map((b) => (
-        <Row key={b.key} style={styles.tableRow}>
-          <AppText variant="caption" style={{ flex: 1.1 }}>
-            {b.label}
+        <View key={b.key} style={styles.tableRow}>
+          <AppText variant="caption" style={{ flex: 1 }}>
+            {b.label.length <= 2 ? label(b) : b.label}
           </AppText>
           {[b.need, b.want, b.income].map((v, i) => (
-            <AppText key={i} variant="caption" style={cell}>
-              {formatMoney(v, currency, { compact: true })}
+            <AppText key={i} variant="monoSmall" style={cell}>
+              {formatFigure(v, currency)}
             </AppText>
           ))}
-        </Row>
+        </View>
       ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tableRow: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  keys: { flexDirection: 'row', gap: 16, marginTop: 14 },
+  plot: { height: PLOT_H, marginTop: 16 },
+  guide: { position: 'absolute', left: 0, right: 0, borderTopWidth: 1, borderColor: colors.rule, borderStyle: 'dashed' },
+  guideLabel: { position: 'absolute', left: 0 },
+  column: { flex: 1, height: '100%' },
+  band: { position: 'absolute', top: 0, bottom: 0, backgroundColor: colors.band },
+  bar: { position: 'absolute', bottom: 0, left: '50%' },
+  ringAt: { position: 'absolute', left: '50%' },
+  baseline: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: colors.ink },
+  labels: { flexDirection: 'row', marginTop: 8 },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line },
 });
-

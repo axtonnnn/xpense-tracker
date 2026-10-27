@@ -9,6 +9,8 @@ import {
   hourlyRateCents,
   hoursOfWork,
   needsShare,
+  nextBill,
+  plannedIncome,
   periodRange,
   previousRange,
   safeToSpend,
@@ -176,5 +178,20 @@ describe('comparePeriods', () => {
   it('reports the monthly budget for the safe-to-spend meter', () => {
     const s = safeToSpend({ today: '2026-10-23', txs: [], expectedIncomeCents: 300000, savingsGoalCents: 60000, recurring: [] });
     expect(s.budget).toBe(240000);
+  });
+});
+
+describe('planned pay and the next bill', () => {
+  const pay = { id: 'p', type: 'income' as const, amount_cents: 68000, cadence: 'weekly' as const, anchor_on: '2026-10-02', next_on: '2026-10-30', active: 1 };
+  const net = { id: 'n', type: 'expense' as const, amount_cents: 6200, cadence: 'monthly' as const, anchor_on: '2026-09-28', next_on: '2026-10-28', active: 1 };
+
+  it('puts pay still to come in the buckets it falls in', () => {
+    const buckets = emptyBuckets('month', '2026-10-25');
+    expect(plannedIncome(buckets, [pay, net], '2026-10-25')).toEqual([0, 0, 0, 0, 68000]);
+  });
+
+  it('finds the soonest bill still due this month', () => {
+    expect(nextBill([pay, net], '2026-10-25')).toEqual({ rule: net, on: '2026-10-28' });
+    expect(nextBill([pay, net], '2026-10-29')).toBeNull();
   });
 });

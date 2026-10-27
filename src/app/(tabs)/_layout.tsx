@@ -24,6 +24,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="ai" options={{ title: 'AI mode' }} />
       <Tabs.Screen name="tracker" options={{ title: 'Tracker' }} />
       <Tabs.Screen name="history" options={{ title: 'History' }} />
+      {/* iPad and Mac only: the sidebar's savings goal. Phones open the goal as its own screen. */}
+      <Tabs.Screen name="savings" options={{ title: 'Savings goal' }} />
     </Tabs>
   );
 }
