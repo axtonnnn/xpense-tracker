@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "xpense",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#F6F2EA",
+    "backgroundColor": "#F4F3EF",
     "ios": {
       "bundleIdentifier": "com.axtonnnn.xpense",
       "supportsTablet": true,
@@ -32,7 +32,7 @@
     "android": {
       "package": "com.axtonnnn.xpense",
       "adaptiveIcon": {
-        "backgroundColor": "#F6F2EA",
+        "backgroundColor": "#F4F3EF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -53,9 +53,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F6F2EA",
+          "backgroundColor": "#F4F3EF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200
+          "imageWidth": 240
         }
       ],
       [

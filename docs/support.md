@@ -37,7 +37,7 @@ Open **Settings → Delete account** in the app. It deletes your account and eve
 
 ### Is my data used to train AI?
 
-No. Receipt photos and questions are sent to the AI only to answer that request, and only after you allow AI features. We don't keep them, and our AI provider, Anthropic, doesn't train its models on them. You can switch AI off in **Settings → On this device**.
+No. Receipt photos and questions are sent to the AI only to answer that request, and only after you allow AI features. We don't keep them, and they aren't used to train AI models. The [Privacy Policy](privacy-policy.md) names the service that runs the AI. You can switch AI off in **Settings → On this device**.
 
 ### Why does reading a receipt take up to a minute?
 
@@ -49,8 +49,12 @@ Everything is editable before you save, including each item's need or want. You 
 
 ### How many AI scans do I get?
 
-Every account gets {{FREE_TRIAL_SCANS}} free scans. Xpense Pro includes up to {{PRO_MONTHLY_SCANS}} scans, {{PRO_MONTHLY_CHECKS}} "Should I buy this?" checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month.
+Every account gets {{FREE_TRIAL_SCANS}} free scans. Xpense Pro includes up to {{PRO_MONTHLY_SCANS}} scans, {{PRO_MONTHLY_CHECKS}} "Should I buy this?" checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month. A photo the AI can't read as a receipt or bill doesn't use one up.
+
+### How does the savings goal work?
+
+Tell Xpense what you're saving for, what it costs and how much you set aside each month. That set-aside is already kept out of what's safe to spend, so moving it into savings changes nothing. Add it on the goal when you do (the dashboard asks once at the start of each month). Adding more than your set-aside comes out of what's safe to spend this month, and taking money out puts it back. When you reach the goal and buy the thing, tap **I bought it**: it's paid from your savings, so it isn't counted as spending.
 
 ### Can I lock the app?
 
-Yes. Turn on **Settings → On this device → Lock with Face ID or passcode**.
+Yes. Turn on **Settings → On this device → Lock with Face ID**. If Face ID doesn't recognise you, your device passcode opens it.

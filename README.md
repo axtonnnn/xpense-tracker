@@ -1,11 +1,11 @@
 # Xpense
 
-A pocket sketchbook for your money: an AI expense & income tracker for people who've just started earning (a first job, a part-time job next to school, saving up for something big) that helps them **spend on real needs, not wants**. Snap a receipt or bill and AI turns it into entries, each line sorted into a need or a want; the dashboard shows what's safe to spend after rent, bills and saving.
+A calm, structured budget for people who've just started earning (a first job, a part-time job next to school, saving up for something big) that helps them **spend on real needs, not wants**. Snap a receipt or bill and the AI turns it into entries, each line sorted into a need or a want; the dashboard shows what's safe to spend after rent, bills and saving, and how close the savings goal is.
 
 <p>
-  <img src="worker/public/screens/dashboard.jpg" width="200" alt="Dashboard: safe to spend and a chart of needs and wants">
-  <img src="worker/public/screens/review.jpg" width="200" alt="A scanned receipt sorted into needs and wants">
-  <img src="worker/public/screens/history.jpg" width="200" alt="History, like a ledger">
+  <img src="docs/app-store/screenshots/iphone-1-safe-to-spend.jpg" width="200" alt="Dashboard: what's safe to spend and the savings goal">
+  <img src="docs/app-store/screenshots/iphone-3-needs-wants.jpg" width="200" alt="A scanned receipt sorted into needs and wants">
+  <img src="docs/app-store/screenshots/iphone-5-goal.jpg" width="200" alt="The savings goal">
 </p>
 <p><img src="docs/app-store/screenshots/ipad-1-dashboard.jpg" width="620" alt="iPad and Mac layout with a sidebar"></p>
 
@@ -16,13 +16,15 @@ A pocket sketchbook for your money: an AI expense & income tracker for people wh
 | Expense & income tracker, history, search, need/want tagging (free on-device rules) | ✓ | ✓ |
 | Dashboard chart of needs, wants and income | Week & month | + 6 months, 1 year, spending by category |
 | Safe to spend, Face ID lock, sync across devices | ✓ | ✓ |
+| A savings goal: progress, when you'll get there, a monthly check-in | ✓ | ✓ |
 | Repeating paychecks & bills (rent, phone, subscriptions) | up to 3 | unlimited |
 | **AI receipt & bill scanning** | 3 free scans | up to 300 a month |
 | **AI "Should I buy this?"**: hours of work and the person's own budget this month | — | ✓ |
 | **AI monthly review** with a safety score and 3 tips | — | ✓ |
 | CSV export, your own categories | — | ✓ |
 
-- **Design:** a sketchbook. Beige paper, white pages, black ink; Instrument Serif headings, Inter text and Caveat pencil notes. Frames, rules and underlines are drawn by a seeded "pen" (`shared/sketch.ts`) so they look hand-drawn but never move. Needs are solid ink, wants are hatched, income is an open ring, so nothing relies on colour. Always light. See the [brand guide](docs/brand/README.md).
+- **Design:** "Gallery". Bone paper, white pages, black ink, square corners and numbered sections; Geist and Geist Mono for everything, Instrument Serif Italic only for the wordmark. Needs are solid ink, wants are hatched, bills still due are dotted, savings are stone, income is an open ring, so nothing relies on colour. Small, quick motion (numbers count up, bars fill, rows fade in, sheets rise) that turns into fades with Reduce Motion. Always light. See the [brand guide](docs/brand/README.md).
+- **Savings goal:** one goal at a time. The monthly set-aside is already kept out of what's safe to spend; money added beyond it comes out of this month, money taken out goes back in. At the start of each month the dashboard asks once whether last month's set-aside went in.
 - **Accounts:** Sign in with Apple or a 6-digit email code (Supabase). Signing in is required; each account has its own database on the device.
 - **Sync:** local-first. Everything works offline in SQLite and syncs through one row-level-secured Supabase table; the newest edit wins. Receipt photos stay on the device that took them.
 - **Every device:** iPhone, iPad and Apple silicon Mac (one build), plus Android. On wide screens the tabs become a sidebar and the dashboard has two columns.
@@ -43,22 +45,25 @@ Phone / iPad / Mac (Expo app)                     Cloudflare Worker (worker/)   
 - **AI model:** Claude Haiku 5.5 at **max effort** with structured outputs, about **$0.002–0.008 per receipt**; answers often take 10–60 seconds. The Worker starts replying at once and sends a space every 10 seconds while Claude thinks, because iPhones drop requests that go quiet for 60 seconds.
 - **"Should I buy this?" knows the budget:** the app sends a few numbers about this month (safe to spend, days left, pay per hour, savings goal and what it's for, wants so far), never the entries themselves.
 - **The API key never ships in the app.** The Worker verifies the Supabase access token (JWKS, or the legacy JWT secret), checks Pro with RevenueCat for that account, and applies trial, fair-use and burst limits. It stores no photos or results.
-- **Sync** (`src/db/sync.ts`): each row has `updated_at` and a `dirty` flag; deletions leave a marker in `sync_deletes`. A sync pulls everything the server got since the last look (with a 5-minute overlap), applies it unless the local row is newer or deleted here, then pushes. Repeating entries use the id `rule:date`, so two devices booking the same paycheck agree. The server's trigger ignores an older edit that arrives late. `src/db/__tests__/sync.test.ts` runs two simulated devices against a fake server.
+- **Sync** (`src/db/sync.ts`): each row has `updated_at` and a `dirty` flag; deletions leave a marker in `sync_deletes`. A sync pulls everything the server got since the last look (with a 5-minute overlap), applies it unless the local row is newer or deleted here, then pushes. Repeating entries use the id `rule:date`, so two devices booking the same paycheck agree. The server's trigger ignores an older edit that arrives late. Goals and their deposits sync the same way; if the server's `schema.sql` is older than the goal, they wait on the device until it is updated. `src/db/__tests__/sync.test.ts` runs two simulated devices against a fake server.
+- **Fair scans:** a photo the AI can't read as a receipt or bill doesn't use up a free scan or the monthly allowance.
 
 ## Project layout
 
 ```
 src/app/              screens (Expo Router): sign-in, email-code, onboarding, (tabs)/index | ai | tracker |
-                      history, scan-review, transaction/[id], settings, paywall
-src/components/       sketch.tsx (frames, rules, hatching, marks, stamps), ui.tsx (design system), brand,
-                      illustrations, tab bar / sidebar, ProgressChart, money widgets, pickers
+                      history | savings, scan-review, buy-check, month-review, goal, transaction/[id],
+                      settings, paywall
+src/components/       ui.tsx (design system), motion.tsx, icons, marks (hatching, dots), Sheet, Toast, brand,
+                      pictures, tab bar / sidebar, ProgressChart, money and goal widgets, pickers, scan flow
 src/theme/tokens.ts   colours, fonts, type scale, wide-screen breakpoint
 src/db/               SQLite schema + migrations, repositories, live queries, sync engine + provider
 src/lib/              auth (Supabase), budget math, receipt splitting, categorize rules, AI client, Pro
-shared/               zod schemas and the sketch pen, shared by the app, the Worker and the scripts
-supabase/schema.sql   the synced table, its row-level security and last-edit-wins trigger
+shared/               zod schemas shared by the app and the Worker
+supabase/             schema.sql (the synced table, row-level security, last-edit-wins trigger) and
+                      email-code.html (the sign-in email)
 worker/               Cloudflare Worker (AI proxy, sign-in check, accounts, website) + tests
-worker/public/        the website's fonts and app pictures
+worker/public/        the website's fonts and icons
 assets/               app icon (xpense.icon for iOS 26, PNGs for Android/splash), logo SVGs
 scripts/              preflight check, demo launcher, brand, web-font and App Store image generators
 docs/                 privacy policy, terms, support page, brand guide, App Store listing kit
@@ -93,9 +98,9 @@ cd worker && npm install && npm test              # AI Worker and website
 
 **[LAUNCH.md](LAUNCH.md)** is the step-by-step guide, from opening the accounts to pressing Submit:
 
-- **Supabase:** run `supabase/schema.sql`, turn on Apple and email-code sign-in, connect an email sender.
+- **Supabase:** run `supabase/schema.sql` (again after updating the app, so goals sync), turn on Apple and email-code sign-in, paste `supabase/email-code.html` as the sign-in email, connect an email sender.
 - **Listing text:** [`docs/app-store/listing.md`](docs/app-store/listing.md) has every App Store Connect field ready to paste, including privacy answers and review notes.
-- **Images:** `docs/app-store/screenshots/` holds five 6.9" iPhone and two 13" iPad screenshots; `docs/app-store/iap-review.jpg` is the subscription review screenshot. `npm run store:screenshots` regenerates them, and the website's pictures, from the web preview.
+- **Images:** `docs/app-store/screenshots/` holds five 6.9" iPhone and two 13" iPad screenshots; `docs/app-store/iap-review.jpg` is the subscription review screenshot. `npm run store:screenshots` regenerates them from the web preview.
 - **Preflight:** `npm run preflight` checks the config, Supabase and the live server; `-- --ai` also signs in with a real email code and reads a sample receipt.
 
 ## Running costs
@@ -123,6 +128,7 @@ A heavy Pro user (60 scans a month) costs about **$0.10–0.50/month** in AI. Th
 | `worker/wrangler.toml` | `SUPABASE_URL` | The same project URL; sign-in tokens are checked against it |
 | | `OWNER_NAME`, `CONTACT_EMAIL`, `GOVERNING_LAW`, `LAST_UPDATED` | Filled into the policy and support pages |
 | | `APP_STORE_URL`, `PLAY_STORE_URL` | Optional. Download buttons on the website |
+| | `PRO_PRICES` | Pro's prices on the website's home page. Keep them the same as App Store Connect, or leave empty to hide them |
 | | `FREE_TRIAL_SCANS`, `PRO_MONTHLY_SCANS`, `PRO_MONTHLY_CHECKS`, `PRO_MONTHLY_REVIEWS` | Trial size and Pro fair-use caps |
 | Worker secrets | `ANTHROPIC_API_KEY`, `REVENUECAT_SECRET_KEY` (V1 secret), `SUPABASE_SECRET_KEY` | Set with `npx wrangler secret put`. Never commit these. Older Supabase projects that still sign tokens with a shared secret also need `SUPABASE_JWT_SECRET` |
 
@@ -131,5 +137,5 @@ A heavy Pro user (60 scans a month) costs about **$0.10–0.50/month** in AI. Th
 | `npm run demo` | Runs the app in Expo Go with sample AI answers |
 | `npm run preflight` | Checks launch readiness. Add `-- --ai` to also test sign-in and a real AI scan |
 | `npm run store:check` | Checks the listing text against App Store Connect's limits |
-| `npm run store:screenshots` | Regenerates the App Store screenshots and the website's pictures from the web preview |
-| `npm run brand` | Regenerates the logo, icon and splash files |
+| `npm run store:screenshots` | Regenerates the App Store screenshots and the subscription review screenshot from the web preview |
+| `npm run brand` | Regenerates the logo, icon, splash and website icon files, and the brand sheet |

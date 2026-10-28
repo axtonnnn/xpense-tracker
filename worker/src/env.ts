@@ -42,4 +42,6 @@ export interface Env {
   /** Optional: the store links, shown as download buttons on the home page once the app is live. */
   APP_STORE_URL?: string;
   PLAY_STORE_URL?: string;
+  /** Optional: Pro's prices as the home page shows them, e.g. "$2.99 a month or $19.99 a year". */
+  PRO_PRICES?: string;
 }

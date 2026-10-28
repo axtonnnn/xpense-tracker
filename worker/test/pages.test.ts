@@ -73,6 +73,7 @@ describe('public pages', () => {
     expect(html).toContain('How it works');
     expect(html).toContain('3 free AI receipt scans');
     expect(html).toContain('Up to 300 AI receipt scans a month');
+    expect(html).toContain('a savings goal');
     expect((await get('/support/')).res.status).toBe(200);
     const head = await get('/terms', filled, 'HEAD');
     expect(head.res.status).toBe(200);
@@ -84,14 +85,22 @@ describe('public pages', () => {
     expect(live).toContain('href="https://apps.apple.com/app/id123"');
     expect(live).toContain('Get it on Google Play');
     expect(live).not.toContain('coming soon');
+    expect(live).toContain('Android too.');
     const unsafe = (await get('/', { APP_STORE_URL: 'javascript:alert(1)' })).html;
     expect(unsafe).not.toContain('javascript:');
     expect(unsafe).toContain('coming soon to the App Store');
+    expect(unsafe).not.toContain('Android');
+  });
+
+  it('shows Pro prices only when they are set', async () => {
+    expect((await get('/', { ...filled, PRO_PRICES: '$2.99 a month or $19.99 a year' })).html).toContain('<h3>Pro · $2.99 a month or $19.99 a year</h3>');
+    expect((await get('/')).html).toContain('<h3>Xpense Pro</h3>');
   });
 
   it('loads its fonts from this site only', async () => {
     const { res, html } = await get('/');
-    expect(html).toContain('url(/fonts/instrument-serif.woff2)');
+    expect(html).toContain('url(/fonts/geist-400.woff2)');
+    expect(html).toContain('url(/fonts/instrument-serif-italic.woff2)');
     expect(html).not.toContain('googleapis');
     expect(res.headers.get('Content-Security-Policy')).toContain("font-src 'self'");
   });

@@ -46,8 +46,11 @@ After rent, bills still due and your savings goal, Xpense shows what's left to s
 PAUSE BEFORE YOU BUY
 Thinking about something new? "Should I buy this?" shows the price in hours of your work and checks it against your own budget this month, with an honest second opinion and a cheaper idea.
 
-DRAWN LIKE A SKETCHBOOK
-No colour-coded guilt. Needs are solid ink, wants are pencil hatching, and your week reads at a glance.
+SAVE UP FOR WHAT YOU REALLY WANT
+A laptop, a car, moving out: set a goal and what you can put aside each month. Xpense keeps that money out of what's safe to spend, shows how close you are, and tells you when you'll get there.
+
+CALM AND CLEAR
+No colour-coded guilt. Needs are solid ink, wants are hatched, and your month reads at a glance, like a well-kept plan.
 
 ON ALL YOUR DEVICES
 Sign in with Apple or an email code, and your budget is the same on your iPhone, iPad and Mac.
@@ -62,6 +65,7 @@ FREE
 • Expense and income tracking with history and search
 • Weekly and monthly charts of needs and wants
 • What's safe to spend, and need/want tagging
+• A savings goal, with a monthly check-in
 • Up to 3 repeating bills or paychecks
 • 3 free AI receipt scans
 
@@ -139,7 +143,7 @@ Nothing is used for tracking or advertising.
 ```text
 Sign-in: please use Sign in with Apple on the first screen. It creates an account in one step; Xpense has no passwords. (Sign-in with a 6-digit email code also works.)
 
-AI features: before anything is sent, the app asks for permission (guideline 5.1.2(i)) and explains that receipt photos go to our AI service, which uses Anthropic's Claude. Every account gets 3 free scans. To test: AI mode > Take photo (or Choose from photos) > any receipt. Reading takes 10 to 60 seconds.
+AI features: before anything is sent, the app asks for permission (guideline 5.1.2(i)). The permission screen lists exactly what goes to our AI service, says that it runs on an outside AI provider, and links to the privacy policy, which names that provider: Anthropic (Claude API). Every account gets 3 free scans; a photo that isn't a receipt or bill doesn't use one up. To test: AI mode > Take photo (or Choose from photos) > any receipt. Reading takes 10 to 60 seconds.
 
 Xpense Pro is an auto-renewable subscription (monthly, or yearly with a 1-week free trial). It can be bought with a sandbox account from any locked feature, for example Dashboard > "6 months", or from Settings > See Pro plans. Restore purchases is on the Pro screen and in Settings > More.
 

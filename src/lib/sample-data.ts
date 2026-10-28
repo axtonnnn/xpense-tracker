@@ -1,11 +1,14 @@
 // Development helper: fills the app with ~3 months of realistic entries (Settings → Developer).
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { addDeposit, getActiveGoal } from '@/db/goals';
+import { nowISO } from '@/db/ids';
 import { notifyChange } from '@/db/live';
 import { addRecurring } from '@/db/recurring';
+import { getSettings } from '@/db/settings';
 import { insertTransaction, type NewTx } from '@/db/transactions';
 import { inTransaction } from '@/db/tx';
-import { addDays, addMonths, startOfMonth, today } from './dates';
+import { addDays, addMonths, endOfMonth, startOfMonth, today } from './dates';
 
 // Small deterministic random generator so sample data looks the same every time.
 function rng(seed: number) {
@@ -69,5 +72,15 @@ export async function loadSampleData(db: SQLiteDatabase, currency: string): Prom
     cadence: 'monthly',
     startOn: addMonths(startOfMonth(t), 1, 6),
   });
+  // The savings goal from setup has been running since the first sample month, with each finished
+  // month's set-aside moved into it.
+  const goal = await getActiveGoal(db);
+  const { savingsGoalCents } = await getSettings(db);
+  if (goal && savingsGoalCents > 0) {
+    await db.runAsync('UPDATE goals SET started_on = ?, updated_at = ?, dirty = 1 WHERE id = ?', start, nowISO(), goal.id);
+    for (let m = start; m < startOfMonth(t); m = addMonths(m, 1)) {
+      await addDeposit(db, { goalId: goal.id, amountCents: savingsGoalCents, occurredOn: endOfMonth(m) });
+    }
+  }
   notifyChange();
 }

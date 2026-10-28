@@ -56,19 +56,13 @@ People sign in with Apple or with a 6-digit code sent to their email, and their 
 - [ ] Sign up at [supabase.com](https://supabase.com) and create a project called `xpense`. Pick the region closest to most of your users, and save the database password somewhere safe (the app doesn't need it).
   - The free plan is enough to launch. Free projects pause after about a week with no activity at all; once people use the app every day that doesn't happen. Upgrading to Pro ($25 a month) removes the pause.
 - [ ] **Create the table.** Open **SQL Editor → New query**, paste the whole of [`supabase/schema.sql`](supabase/schema.sql), and press **Run**. It creates one table, `records`, where each account can only see its own rows.
+  - Already ran it for an earlier version? Run it again: it's safe to repeat, and the savings goal needs it to sync.
 - [ ] **Sign in with Apple.** Open **Authentication → Sign In / Providers → Apple** and turn it on. Under **Client IDs**, enter your bundle ID: `com.axtonnnn.xpense` (or your own, see step 6). Leave the other fields empty: the app signs in with Apple's own sheet, so no secret key is needed. Save.
 - [ ] **Email codes.**
   - In **Authentication → Sign In / Providers → Email**: make sure Email is on, and set **Email OTP Length** to `6`.
-  - In **Authentication → Emails → Templates** (older dashboards: **Email Templates**), open **Magic Link** and replace the body with a code, for example:
-
-    ```html
-    <h2>Your Xpense code</h2>
-    <p>Type this code in Xpense to sign in:</p>
-    <p style="font-size:28px;letter-spacing:6px"><b>{{ .Token }}</b></p>
-    <p>It works once. If you didn't ask for it, you can ignore this email.</p>
-    ```
-
-    Use the same body for the **Confirm signup** template. Subject: `Your Xpense code`.
+  - In **Authentication → Emails → Templates** (older dashboards: **Email Templates**), open **Magic Link**. Set the subject to `Your Xpense code`, and replace the whole body with the contents of [`supabase/email-code.html`](supabase/email-code.html): the sign-in code in the app's style. Save.
+  - Do the same for the **Confirm signup** template (new accounts get that one).
+  - Leave **Email OTP Expiration** at its default of one hour; the email says so.
 - [ ] **Send emails from your own domain.** Supabase's built-in email is only for testing (it sends a few emails an hour, and only to your own team), so real users need your own sender:
   1. Buy a domain if you don't have one (any registrar, or Cloudflare Registrar).
   2. Sign up at [resend.com](https://resend.com) (free for 3,000 emails a month), add your domain under **Domains**, and add the DNS records it shows. Wait until it says **Verified**.
@@ -105,6 +99,8 @@ The server keeps your API key off the phone, checks each person's sign-in and su
   | `GOVERNING_LAW` | `the State of California, USA` |
   | `LAST_UPDATED` | `1 November 2026`, the day you publish |
   | `SUPABASE_URL` | `https://abcd1234.supabase.co`, the same Project URL as in `app.json` |
+
+  `PRO_PRICES` (the prices on the website's Pro plan) is already set to `$2.99 a month or $19.99 a year`. Change it if you pick other prices in step 6, or set it to `""` to hide them.
 
 - [ ] Deploy, then add the secrets:
 
@@ -233,7 +229,7 @@ Review usually takes 1 to 3 days. If Apple asks a question or rejects something,
 
 ## After you're live
 
-- [ ] Put your App Store link in `worker/wrangler.toml` as `APP_STORE_URL` and run `cd worker && npx wrangler deploy`. The website's "coming soon" stamp becomes a download button.
+- [ ] Put your App Store link in `worker/wrangler.toml` as `APP_STORE_URL` and run `cd worker && npx wrangler deploy`. The website's "coming soon" note becomes a download button.
 - [ ] Apply for the [App Store Small Business Program](https://developer.apple.com/app-store/small-business-program/) to pay 15% commission instead of 30%.
 - [ ] Watch your AI spend at console.anthropic.com. To see the server's live log, run `cd worker && npx wrangler tail`. Supabase's dashboard shows sign-ups under **Authentication → Users**.
 - [ ] **Updates:**
@@ -241,7 +237,7 @@ Review usually takes 1 to 3 days. If Apple asks a question or rejects something,
   2. Run the step 9 command again.
   3. Add a new version in App Store Connect.
 
-  If you change the policy text in `docs/`, the website, or the settings in `wrangler.toml`, redeploy the server with `cd worker && npx wrangler deploy`.
+  If you change the policy text in `docs/`, the website, or the settings in `wrangler.toml`, redeploy the server with `cd worker && npx wrangler deploy`. If an update changes `supabase/schema.sql`, run it again in Supabase's SQL Editor before you release the app.
 
 ## If something goes wrong
 
@@ -255,6 +251,7 @@ Review usually takes 1 to 3 days. If Apple asks a question or rejects something,
 | The app says "The AI service had a problem" | Check your Anthropic credit (console.anthropic.com → Billing), then run `npm run preflight -- --ai`. |
 | The app says "Couldn't confirm your subscription" | The server's `REVENUECAT_SECRET_KEY` must be a **V1 secret** key. Preflight tells you if RevenueCat rejects it. |
 | Entries don't show up on another device | Both must be signed in to the same account (Settings shows which). Settings → **Sync now** shows whether the device is online. Check the `records` table exists (preflight). |
+| Entries sync but the savings goal doesn't | Your Supabase table is from before the savings goal. Run `supabase/schema.sql` again (step 3); the goal syncs on the next **Sync now**. |
 | The paywall says "Plans are loading" in TestFlight | Check three things: the Paid Apps agreement is active, both subscriptions are Ready to Submit, and the RevenueCat offering is **current** with both packages. |
 | A build fails | Open the build page link that EAS prints. A bundle ID that doesn't match App Store Connect is the most common cause. |
 | App Review mentions guideline 3.1.2 (subscriptions) | The description in `listing.md` already has the subscription terms and the Terms and Privacy links. Make sure they made it into App Store Connect. |

@@ -1,4 +1,5 @@
-// Regenerates every logo and icon file from scripts/brand/mark.mjs and the Instrument Serif font.
+// Regenerates every logo and icon file (app, website) and the brand sheet from scripts/brand/mark.mjs and
+// the Geist and Instrument Serif fonts.
 //
 //   CHROME_PATH=/path/to/chrome node scripts/brand/render.mjs
 //
@@ -61,7 +62,8 @@ function logo(ink = COLORS.ink) {
 }
 
 const markOnly = () => svg(leaves(), 1024, `${MARK_BOX.x} ${MARK_BOX.x} ${MARK_BOX.size} ${MARK_BOX.size}`);
-const ICON_SCALE = 1.04;
+// The mark fills about 65% of the icon tile (566 × 1.18 of 1024), as in the Gallery icon design.
+const ICON_SCALE = 1.18;
 
 // --- Vector sources ---
 mkdirSync(out('assets', 'brand'), { recursive: true });
@@ -69,6 +71,8 @@ const files = {
   'assets/brand/mark.svg': markOnly(),
   'assets/brand/logo.svg': logo(),
   'assets/brand/icon.svg': svg(paperBackground() + leaves({ scale: ICON_SCALE })),
+  // Browser tabs: the paper tile with outlined wants, edged thick enough to read at 16 px.
+  'worker/public/favicon.svg': svg(`<rect width="1024" height="1024" rx="220" fill="${COLORS.paper}"/>${leaves({ scale: 1.12, hatch: 0, outline: 56 })}`, 32),
 };
 for (const [path, content] of Object.entries(files)) writeFileSync(out(path), content);
 
@@ -78,11 +82,12 @@ mkdirSync(join(iconDir, 'Assets'), { recursive: true });
 writeFileSync(join(iconDir, 'Assets', 'needs.svg'), svg(leaves({ which: 'needs', scale: ICON_SCALE })));
 writeFileSync(join(iconDir, 'Assets', 'wants.svg'), svg(leaves({ which: 'wants', scale: ICON_SCALE })));
 const layer = (name) => ({ 'image-name': `${name}.svg`, name, position: { scale: 1, 'translation-in-points': [0, 0] } });
+const srgb = (hex) => [1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(5)).join(',');
 writeFileSync(
   join(iconDir, 'icon.json'),
   JSON.stringify(
     {
-      fill: { solid: 'extended-srgb:0.96471,0.94902,0.91765,1.00000' },
+      fill: { solid: `extended-srgb:${srgb(COLORS.paper)},1.00000` },
       groups: [{ layers: [layer('wants'), layer('needs')], shadow: { kind: 'neutral', opacity: 0.25 }, translucency: { enabled: false, value: 0 } }],
       'supported-platforms': { circles: ['watchOS'], squares: 'shared' },
     },
@@ -102,8 +107,10 @@ const rasters = [
   {
     path: 'assets/images/favicon.png',
     size: 48,
-    body: `<g transform="scale(${48 / 1024})"><rect width="1024" height="1024" rx="220" fill="${COLORS.paper}"/>${leaves({ scale: 1.12, hatch: 0 })}</g>`,
+    body: `<g transform="scale(${48 / 1024})"><rect width="1024" height="1024" rx="220" fill="${COLORS.paper}"/>${leaves({ scale: 1.12, hatch: 0, outline: 40 })}</g>`,
   },
+  // The website's icon when someone adds it to their home screen (iOS rounds the corners itself).
+  { path: 'worker/public/apple-touch-icon.png', size: 180, body: `<g transform="scale(${180 / 1024})">${paperBackground()}${leaves({ scale: ICON_SCALE })}</g>` },
 ];
 
 const browser = await chromium.launch({
@@ -119,60 +126,84 @@ for (const r of rasters) {
   await page.screenshot({ path: out(r.path), omitBackground: !!r.transparent, clip: { x: 0, y: 0, width: r.size, height: r.size } });
 }
 
-// --- Brand sheet (docs/brand/brand-sheet.png) ---
+// --- Brand sheet (docs/brand/brand-sheet.png), in the Gallery style ---
 const font = (dir, file) => readFileSync(join(FONTS, dir, file)).toString('base64');
-const face = (family, b64, extra = '') => `@font-face{font-family:"${family}";src:url(data:font/ttf;base64,${b64});${extra}}`;
+const face = (family, b64, weight = 400, style = 'normal') =>
+  `@font-face{font-family:"${family}";font-weight:${weight};font-style:${style};src:url(data:font/ttf;base64,${b64})}`;
 const swatch = (name, hex, note) =>
   `<div class="sw"><div class="chip" style="background:${hex}"></div><b>${name}</b><span>${hex}</span><em>${note}</em></div>`;
+const key = (cls, label) => `<span class="key"><i class="${cls}"></i>${label}</span>`;
+const section = (index, title, body) => `<section><span class="index">${index}</span><h2>${title}</h2>${body}</section>`;
+const tile = (s) =>
+  `<div style="width:${s}px;height:${s}px;border-radius:${s * 0.2237}px;overflow:hidden;box-shadow:inset 0 0 0 1px #D9D7D0">${svg(
+    paperBackground() + leaves({ scale: ICON_SCALE, hatch: s >= 76 ? 36 : 0, outline: s >= 76 ? 16 : 40, id: `i${s}` }),
+    s,
+  )}</div>`;
 const sheet = `<html><head><style>
-${face('Brand Serif', font('instrument-serif', '400Regular/InstrumentSerif_400Regular.ttf'))}
-${face('Brand Serif Italic', font('instrument-serif', '400Regular_Italic/InstrumentSerif_400Regular_Italic.ttf'))}
-${face('Inter', font('inter', '400Regular/Inter_400Regular.ttf'))}
-${face('InterSB', font('inter', '600SemiBold/Inter_600SemiBold.ttf'))}
-${face('Caveat', font('caveat', '500Medium/Caveat_500Medium.ttf'))}
-body{margin:0;background:#F6F2EA;color:#111;font-family:Inter;width:1400px}
-.wrap{padding:56px 64px}
-h1{font-family:"Brand Serif Italic";font-weight:400;font-size:64px;margin:0}
-h2{font-family:InterSB;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#5E5A53;margin:44px 0 16px}
-.lead{font-size:19px;color:#5E5A53;max-width:880px;line-height:1.5;margin:10px 0 0}
-.row{display:flex;gap:28px;align-items:center;flex-wrap:wrap}
-.card{background:#fff;padding:34px 40px;box-shadow:inset 0 0 0 1.3px #111}
-.sw{display:flex;flex-direction:column;gap:4px;width:150px;font-size:14px}
-.sw .chip{height:84px;border-radius:3px;margin-bottom:6px;box-shadow:inset 0 0 0 1px rgba(17,17,17,.16)}.sw span{color:#5E5A53;font-family:InterSB}.sw em{color:#716B62;font-style:normal;font-size:13px}
-.legend{display:flex;gap:36px;font-family:InterSB;font-size:16px;margin-top:18px}
-.legend i{display:inline-block;width:40px;height:24px;margin-right:12px;vertical-align:-6px;border-radius:2px}
-.need{background:#111}.want{box-shadow:inset 0 0 0 1.2px #111;background-image:repeating-linear-gradient(-45deg,#111 0 1px,transparent 1px 5px)}
-.ring{width:18px!important;height:18px!important;border-radius:50%!important;border:1.4px solid #111}
-.type div{margin:8px 0}.note{font-family:Caveat;font-size:30px;color:#5E5A53}
+${face('Geist', font('geist', '200ExtraLight/Geist_200ExtraLight.ttf'), 200)}
+${face('Geist', font('geist', '300Light/Geist_300Light.ttf'), 300)}
+${face('Geist', font('geist', '400Regular/Geist_400Regular.ttf'), 400)}
+${face('Geist', font('geist', '500Medium/Geist_500Medium.ttf'), 500)}
+${face('Geist Mono', font('geist-mono', '400Regular/GeistMono_400Regular.ttf'))}
+${face('Instrument Serif', font('instrument-serif', '400Regular_Italic/InstrumentSerif_400Regular_Italic.ttf'), 400, 'italic')}
+*{box-sizing:border-box}
+body{margin:0;background:#F4F3EF;color:#111;font-family:Geist;width:1400px;-webkit-font-smoothing:antialiased}
+.wrap{padding:64px 72px 72px}
+.lead{font-weight:300;font-size:22px;line-height:32px;letter-spacing:-.02em;color:#6B6A66;max-width:900px;margin:28px 0 0}
+section{margin-top:56px;padding-top:24px;border-top:1px solid #D9D7D0}
+.index{font-family:"Geist Mono";font-size:12px;color:#6B6A66}
+h2{margin:8px 0 24px;font-weight:300;font-size:40px;line-height:44px;letter-spacing:-1.4px}
+.row{display:flex;gap:32px;align-items:flex-end;flex-wrap:wrap}
+.card{background:#fff;padding:36px 44px;border:1px solid #D9D7D0}
+.sw{display:flex;flex-direction:column;gap:4px;width:136px;font-size:14px}
+.sw .chip{height:84px;margin-bottom:8px;box-shadow:inset 0 0 0 1px #D9D7D0}.sw span{font-family:"Geist Mono";font-size:12px;color:#6B6A66}.sw em{color:#6B6A66;font-style:normal;font-size:13px}
+.keys{display:flex;gap:36px;flex-wrap:wrap;font-size:15px}
+.key{display:flex;align-items:center;gap:12px}
+.key i{display:inline-block;width:44px;height:20px;border:1px solid #111}
+.need{background:#111}.want{background:repeating-linear-gradient(-45deg,#111 0 1px,#fff 1px 4px)}
+.bills{background-color:#fff;background-image:radial-gradient(#111 .8px,transparent 1.1px);background-size:3px 3px}
+.savings{background:#CFCCC4}.left{background:#fff}
+.key i.ring{width:16px;height:16px;border-radius:50%;border:1.5px solid #111}.key i.planned{width:16px;height:16px;border-radius:50%;border:1.5px dashed #111}
+.type div{margin:0 0 18px}
+.type small{display:block;font-family:"Geist Mono";font-size:11px;color:#6B6A66;margin-bottom:6px}
 </style></head><body><div class="wrap">
-<h1>xpense</h1>
-<p class="lead">A pocket sketchbook for your money: beige paper, white pages, black ink. Two leaves cross to make the X. One diagonal is <b>needs</b>, drawn in solid ink; the other is <b>wants</b>, pencil-hatched. The whole app reads in black and white.</p>
-
-<h2>Logo</h2>
-<div class="row"><div class="card">${files['assets/brand/logo.svg'].replace(/width="\d+" height="\d+"/, 'height="96"')}</div></div>
-<div class="legend"><span><i class="need"></i>Needs</span><span><i class="want"></i>Wants</span><span><i class="ring"></i>Income</span></div>
-
-<h2>App icon</h2>
-<div class="row">${[220, 120, 76, 44]
-  .map(
-    (s) =>
-      `<div style="width:${s}px;height:${s}px;border-radius:${s * 0.2237}px;overflow:hidden;box-shadow:0 0 0 1px rgba(17,17,17,.14),0 8px 24px rgba(17,17,17,.10)">${svg(
-        paperBackground() + leaves({ scale: ICON_SCALE, hatch: s >= 76 ? 36 : 0, id: `i${s}` }),
-        s,
-      )}</div>`,
-  )
-  .join('')}</div>
-
-<h2>Colour</h2>
-<div class="row">${swatch('Paper', '#F6F2EA', 'the ground')}${swatch('Page', '#FFFFFF', 'cards')}${swatch('Sand', '#E7DFD0', 'bills, tracks')}
-${swatch('Ink', '#111111', 'text, needs')}${swatch('Graphite', '#5E5A53', 'quiet text')}${swatch('Pencil', '#716B62', 'hints, notes')}${swatch('Alert', '#8C2F25', 'errors only')}</div>
-
-<h2>Type</h2>
-<div class="card type">
-<div style="font-family:'Brand Serif';font-size:64px;line-height:1">$1,988.56</div>
-<div style="font-family:'Brand Serif';font-size:34px">Where it went</div>
-<div style="font-size:18px;color:#5E5A53">Inter for everything you read and tap · About $284.08 a day for the 7 days left</div>
-<div class="note">Caveat, only for pencil notes in the margins</div></div>
+${files['assets/brand/logo.svg'].replace(/width="\d+" height="\d+"/, 'height="72"')}
+<p class="lead">A gallery for your money: bone paper, white pages, black ink and square corners, with type that does the work. Two leaves cross to make the X. One diagonal is needs, in solid ink; the other is wants, hatched. Nothing depends on colour.</p>
+${section('01', 'Logo', `<div class="row"><div class="card">${files['assets/brand/logo.svg'].replace(/width="\d+" height="\d+"/, 'height="88"')}</div>
+<div class="card">${svg(leaves({ id: 'm96' }), 96, '229 229 566 566')}</div><div class="card">${svg(leaves({ hatch: 0, outline: 28 }), 32, '229 229 566 566')}</div></div>`)}
+${section('02', 'App icon', `<div class="row">${[220, 120, 76, 44].map(tile).join('')}</div>`)}
+${section(
+  '03',
+  'Colour',
+  `<div class="row">${swatch('Paper', '#F4F3EF', 'the ground')}${swatch('Page', '#FFFFFF', 'cards, sheets')}${swatch('Ink', '#111111', 'text, needs')}${swatch(
+    'Grey',
+    '#6B6A66',
+    'quiet text',
+  )}${swatch('Rule', '#D9D7D0', 'section lines')}${swatch('Stone', '#CFCCC4', 'savings')}${swatch('Band', '#ECEAE4', 'chart selection')}${swatch(
+    'Alert',
+    '#8C2F25',
+    'errors only',
+  )}</div>`,
+)}
+${section(
+  '04',
+  'Type',
+  `<div class="card type">
+<div><small>hero · Geist ExtraLight 96</small><span style="font-weight:200;font-size:96px;line-height:96px;letter-spacing:-4.8px">$728</span></div>
+<div><small>display · Geist Light 60</small><span style="font-weight:300;font-size:60px;line-height:60px;letter-spacing:-2.7px">October</span></div>
+<div><small>headline · Geist Light 40</small><span style="font-weight:300;font-size:40px;letter-spacing:-1.4px">Where it went</span></div>
+<div><small>body · Geist Regular 15</small><span style="font-size:15px;line-height:22px">About $104.03 a day for the 7 days left</span></div>
+<div><small>figures · Geist Mono 14</small><span style="font-family:'Geist Mono';font-size:14px">−46.34   +680.00</span></div>
+<div style="margin:0"><small>wordmark only · Instrument Serif Italic</small><span style="font-family:'Instrument Serif';font-style:italic;font-size:44px">xpense</span></div></div>`,
+)}
+${section(
+  '05',
+  'How money is drawn',
+  `<div class="keys">${key('need', 'Needs')}${key('want', 'Wants')}${key('bills', 'Bills still due')}${key('savings', 'Savings')}${key('left', 'Left to spend')}${key(
+    'ring',
+    'Income',
+  )}${key('planned', 'Planned')}</div>`,
+)}
 </div></body></html>`;
 mkdirSync(out('docs', 'brand'), { recursive: true });
 await page.setViewportSize({ width: 1400, height: 900 });

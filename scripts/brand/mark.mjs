@@ -1,11 +1,11 @@
 // Xpense brand mark: an X made of four slim leaves, drawn in ink. The "/" diagonal is needs (solid ink),
-// the "\" diagonal is wants (pencil hatching) — the app's whole idea in one symbol. Geometry is on a
+// the "\" diagonal is wants (hatched) — the app's whole idea in one symbol. Geometry is on a
 // 1024 × 1024 canvas centred at (512, 512). The same numbers drive the in-app <LogoMark />
 // (src/components/brand.tsx) and the website (worker/src/pages.ts); keep them in sync.
 
 export const GEOMETRY = { r0: 14, R: 400, w: 86 };
 
-export const COLORS = { ink: '#111111', paper: '#F6F2EA', page: '#FFFFFF' };
+export const COLORS = { ink: '#111111', paper: '#F4F3EF', page: '#FFFFFF' };
 
 /** One leaf pointing along +x: base at r0 (near the centre), tip at R, widest just past the middle. */
 export function leafPath({ r0, R, w } = GEOMETRY) {
@@ -23,11 +23,12 @@ const leaf = (angle, attrs, { cx = 512, cy = 512, scale = 1 } = {}) =>
 
 /**
  * The mark's leaves. `which` picks the diagonals (the Icon Composer bundle has them as layers);
- * `hatch` is the spacing of the wants' pencil lines in canvas units, or 0 for plain outlines (tiny sizes).
+ * `hatch` is the spacing of the wants' lines in canvas units, or 0 for plain outlines (tiny sizes), and
+ * `outline` the width of the wants' edge, in canvas units after scaling.
  */
-export function leaves({ which = 'both', scale = 1, hatch = 36, ink = COLORS.ink, fill = COLORS.paper, id = 'hatch' } = {}) {
+export function leaves({ which = 'both', scale = 1, hatch = 36, ink = COLORS.ink, fill = COLORS.paper, id = 'hatch', outline: edge = 16 } = {}) {
   const parts = [];
-  const outline = Math.round(16 / Math.max(scale, 0.5));
+  const outline = Math.round(edge / Math.max(scale, 0.5));
   if (hatch && which !== 'needs') {
     parts.push(
       `<defs><pattern id="${id}" patternUnits="userSpaceOnUse" width="${hatch}" height="${hatch}" patternTransform="rotate(45)"><line x1="${hatch / 2}" y1="0" x2="${hatch / 2}" y2="${hatch}" stroke="${ink}" stroke-width="${hatch / 4}"/></pattern></defs>`,

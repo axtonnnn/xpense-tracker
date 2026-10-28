@@ -1,5 +1,5 @@
 // The Xpense mark: an X of four slim leaves drawn in ink. The "/" diagonal is needs (solid ink), the "\"
-// diagonal is wants (pencil hatching). Geometry matches scripts/brand/mark.mjs (which renders the app
+// diagonal is wants (hatched). Geometry matches scripts/brand/mark.mjs (which renders the app
 // icon); keep them in sync.
 import { useId } from 'react';
 import { Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -75,7 +75,7 @@ export function AppIcon({ size = 88, style }: { size?: number; style?: StyleProp
         },
         style,
       ]}>
-      <LogoMark size={size * 0.6} />
+      <LogoMark size={size * 0.65} />
     </View>
   );
 }
