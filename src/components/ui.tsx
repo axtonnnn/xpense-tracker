@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -129,6 +130,7 @@ export function Screen({
   full,
   topInset = true,
   contentStyle,
+  refresh,
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -136,6 +138,8 @@ export function Screen({
   /** Pad for the status bar (every screen draws its own header). */
   topInset?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Pull down to refresh (see usePullToSync). */
+  refresh?: { refreshing: boolean; onRefresh: () => void };
 }) {
   const insets = useSafeAreaInsets();
   const margin = useMargin();
@@ -153,10 +157,16 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       automaticallyAdjustKeyboardInsets
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={false}
+      refreshControl={refresh ? <PullControl {...refresh} /> : undefined}>
       {children}
     </ScrollView>
   );
+}
+
+/** The pull-to-refresh spinner, in ink. */
+export function PullControl({ refreshing, onRefresh }: { refreshing: boolean; onRefresh: () => void }) {
+  return <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink} colors={[colors.ink]} progressBackgroundColor={colors.page} />;
 }
 
 /** A screen's big title (Display 60), with an optional line above and something on the right. */

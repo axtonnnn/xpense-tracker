@@ -13,7 +13,7 @@ import { depositsBetween, useActiveGoal } from '@/db/goals';
 import { useLiveQuery } from '@/db/live';
 import { listRecurring, type Recurring } from '@/db/recurring';
 import { useSettings, type Settings } from '@/db/settings';
-import { useSync } from '@/db/SyncProvider';
+import { usePullToSync, useSync } from '@/db/SyncProvider';
 import { listBetween, listRecentScans, type Tx } from '@/db/transactions';
 import { useUser } from '@/lib/auth';
 import {
@@ -81,6 +81,7 @@ export default function Dashboard() {
   const requirePro = useRequirePro();
   const goal = useActiveGoal();
   const money = useMoneySheet();
+  const pull = usePullToSync();
   const [period, setPeriod] = useState<Period>('month');
   const [picked, setPicked] = useState<{ period: Period; index: number } | null>(null);
   const t = today();
@@ -214,7 +215,7 @@ export default function Dashboard() {
       </>
     );
     return (
-      <Screen full={wide}>
+      <Screen full={wide} refresh={pull}>
         {header}
         {tabs}
         <View style={{ marginTop: 44 }}>{sections}</View>
@@ -237,7 +238,7 @@ export default function Dashboard() {
 
   if (wide) {
     return (
-      <Screen full>
+      <Screen full refresh={pull}>
         {header}
         {tabs}
         {checkinPanel}
@@ -261,7 +262,7 @@ export default function Dashboard() {
   }
 
   return (
-    <Screen>
+    <Screen refresh={pull}>
       {header}
       {tabs}
       {checkinPanel}

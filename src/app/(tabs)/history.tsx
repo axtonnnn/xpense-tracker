@@ -8,9 +8,10 @@ import { Icon } from '@/components/icons';
 import { useEntrance } from '@/components/motion';
 import { DayHeader, TxRow } from '@/components/money-ui';
 import { EmptyPage } from '@/components/pictures';
-import { AppText, Chip, EmptyState, IconButton, TextLink, useMargin } from '@/components/ui';
+import { AppText, Chip, EmptyState, IconButton, PullControl, TextLink, useMargin } from '@/components/ui';
 import { useLiveQuery } from '@/db/live';
 import { useSettings, type Settings } from '@/db/settings';
+import { usePullToSync } from '@/db/SyncProvider';
 import { listBetween, type Tx } from '@/db/transactions';
 import { totals } from '@/lib/budget';
 import { categoryInfo } from '@/lib/categories';
@@ -105,6 +106,7 @@ function HistoryList({
   const margin = useMargin();
   const wide = useWide();
   const entrance = useEntrance(14);
+  const pull = usePullToSync();
   const from = month;
   const to = endOfMonth(month);
   const { data: txs } = useLiveQuery((db) => listBetween(db, from, to), [from, to]);
@@ -154,6 +156,7 @@ function HistoryList({
       keyExtractor={(tx) => tx.id}
       stickySectionHeadersEnabled={false}
       showsVerticalScrollIndicator={false}
+      refreshControl={pull ? <PullControl {...pull} /> : undefined}
       ListHeaderComponent={
         <View style={{ marginBottom: 0 }}>
           <View style={styles.titleRow}>

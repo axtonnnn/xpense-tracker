@@ -69,8 +69,10 @@ describe('public pages', () => {
 
   it('serves the home page, tolerates a trailing slash and answers HEAD', async () => {
     const { html } = await get('/');
-    expect(html).toContain('Spend on what matters.');
+    expect(html).toContain('<title>Xpense: spend on what matters</title>');
+    expect(html).toContain('<span class="w" style="--i:3">matters.</span>');
     expect(html).toContain('How it works');
+    expect(html).toContain('Save up for what you really want');
     expect(html).toContain('3 free AI receipt scans');
     expect(html).toContain('Up to 300 AI receipt scans a month');
     expect(html).toContain('a savings goal');

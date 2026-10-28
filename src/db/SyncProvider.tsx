@@ -99,3 +99,16 @@ export function useSync(): SyncState {
   if (!ctx) throw new Error('useSync must be used inside <SyncProvider>');
   return ctx;
 }
+
+export type PullToSync = { refreshing: boolean; onRefresh: () => void };
+
+/** Pull down to sync now, for a screen's scroll view. Nothing for the preview account, which never syncs. */
+export function usePullToSync(): PullToSync | undefined {
+  const { status, syncNow } = useSync();
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void syncNow().finally(() => setRefreshing(false));
+  }, [syncNow]);
+  return status === 'local' ? undefined : { refreshing, onRefresh };
+}
