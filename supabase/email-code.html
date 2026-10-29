@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light">
+<title>Your Xpense code</title>
+</head>
+<!--
+  The sign-in email, in the app's Gallery style. In Supabase, open Authentication → Emails → Templates,
+  and paste this whole file as the body of both "Magic Link" and "Confirm signup". Subject: Your Xpense code
+  Supabase puts the 6-digit code where the Token tag is. Email apps don't load web fonts, so Geist falls back
+  to the system font.
+-->
+<body style="margin:0;padding:0;background-color:#F4F3EF;color:#111111;-webkit-text-size-adjust:100%">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F4F3EF">
+  <tr>
+    <td align="center" style="padding:40px 16px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#FFFFFF;border:1px solid #D9D7D0">
+        <tr>
+          <td style="padding:40px 40px 36px;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+            <p style="margin:0;font-family:'Instrument Serif',Georgia,'Times New Roman',serif;font-style:italic;font-size:30px;line-height:30px;color:#111111">xpense</p>
+
+            <h1 style="margin:40px 0 0;font-weight:300;font-size:32px;line-height:38px;letter-spacing:-0.9px;color:#111111">Your sign-in code</h1>
+            <p style="margin:12px 0 0;font-size:15px;line-height:22px;color:#6B6A66">Type this code in Xpense to sign in.</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px">
+              <tr>
+                <td align="center" style="padding:22px 0;border-top:1px solid #111111;border-bottom:1px solid #111111;font-family:'Geist Mono',ui-monospace,Menlo,Consolas,'Courier New',monospace;font-size:40px;line-height:48px;letter-spacing:8px;color:#111111">{{ .Token }}</td>
+              </tr>
+            </table>
+
+            <p style="margin:20px 0 0;font-size:13px;line-height:19px;color:#6B6A66">It works once and expires in one hour.</p>
+            <p style="margin:8px 0 0;font-size:13px;line-height:19px;color:#6B6A66">Didn’t ask for it? You can ignore this email. Someone may have typed your address by mistake, and nothing happens without the code.</p>
+
+            <p style="margin:40px 0 0;padding-top:16px;border-top:1px solid #D9D7D0;font-size:12px;line-height:18px;color:#6B6A66">Xpense · Spend on what matters</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
