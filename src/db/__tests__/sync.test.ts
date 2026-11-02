@@ -7,7 +7,7 @@ import { migrate } from '../migrate';
 import { applyDueRecurring, addRecurring } from '../recurring';
 import { getSettings, setSettings } from '../settings';
 import { syncOnce, pendingChanges, type Remote, type RemoteRecord } from '../sync';
-import { deleteTransaction, getTransaction, insertTransaction, listBetween, saveScannedReceipt, updateTransaction } from '../transactions';
+import { deleteAllData, deleteTransaction, getTransaction, insertTransaction, listBetween, saveScannedReceipt, updateTransaction } from '../transactions';
 import { nodeDatabase } from '@/test/node-db';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -226,5 +226,22 @@ describe('sync between two devices', () => {
     expect(await pendingChanges(phone)).toBe(1);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  it('leaves nothing on the device after the account is deleted, savings goals included', async () => {
+    const { remote, rows } = fakeServer();
+    const phone = await device();
+    const goalId = await createGoal(phone, { name: 'A laptop', targetCents: 120000, startedOn: '2026-09-20', alreadySavedCents: 12000 });
+    await addDeposit(phone, { goalId, amountCents: 30000, occurredOn: '2026-10-01', note: 'October' });
+    await insertTransaction(phone, expense('Green Valley Market', 5000));
+
+    await deleteAllData(phone);
+
+    expect(await getActiveGoal(phone)).toBeNull();
+    expect(await listDeposits(phone, goalId)).toEqual([]);
+    expect(await pendingChanges(phone)).toBe(0);
+    // Whoever signs in on this phone next must not receive any of it.
+    await syncOnce(phone, remote);
+    expect([...rows.keys()]).toEqual([]);
   });
 });
