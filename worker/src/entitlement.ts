@@ -116,8 +116,17 @@ export async function checkAccess(
 /**
  * Forgets an account: its usage counters, cached Pro status and its RevenueCat customer record.
  * (An App Store subscription itself is cancelled by the person in their Apple account.)
+ * Runs after the sign-in is gone, so it never throws: one failed step mustn't stop the other, or tell
+ * the person their account wasn't deleted when it was.
  */
 export async function forgetAccount(env: Env, userId: string, fetchImpl: typeof fetch): Promise<void> {
+  const steps = await Promise.allSettled([forgetCounters(env, userId), forgetCustomer(env, userId, fetchImpl)]);
+  for (const step of steps) {
+    if (step.status === 'rejected') console.error('[account] cleanup failed for', userId, step.reason);
+  }
+}
+
+async function forgetCounters(env: Env, userId: string): Promise<void> {
   for (const prefix of [`usage:${userId}:`, `trial:${userId}`, `pro:${userId}`]) {
     let cursor: string | undefined;
     do {
@@ -126,13 +135,15 @@ export async function forgetAccount(env: Env, userId: string, fetchImpl: typeof 
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
   }
-  if (env.REVENUECAT_SECRET_KEY) {
-    const res = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}`, Accept: 'application/json' },
-    });
-    if (!res.ok && res.status !== 404) console.error('[account] RevenueCat delete failed', res.status);
-  }
+}
+
+async function forgetCustomer(env: Env, userId: string, fetchImpl: typeof fetch): Promise<void> {
+  if (!env.REVENUECAT_SECRET_KEY) return;
+  const res = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}`, Accept: 'application/json' },
+  });
+  if (!res.ok && res.status !== 404) console.error('[account] RevenueCat delete failed for', userId, res.status);
 }
 
 /** Counts a successful AI call. Returns free scans left for trial users. */
