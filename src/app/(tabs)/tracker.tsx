@@ -61,7 +61,8 @@ export default function Tracker() {
   const [necessity, setNecessity] = useState<Necessity>('need');
   const [pickedByHand, setPickedByHand] = useState(false);
   const [guessedFrom, setGuessedFrom] = useState<string | null>(null);
-  const [date, setDate] = useState(today());
+  // null means "today", worked out when it's needed: this tab stays open for days while the app sleeps.
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [repeat, setRepeat] = useState<Repeat>('none');
   const [saving, setSaving] = useState(false);
@@ -70,6 +71,7 @@ export default function Tracker() {
 
   const currency = settings?.currency ?? 'USD';
   const custom = settings?.customCategories ?? [];
+  const date = pickedDate ?? today();
   const cents = parseAmount(amount);
   const hours =
     type === 'expense' && cents && settings ? hoursOfWork(cents, hourlyRateCents(settings.monthlyIncomeCents, settings.hoursPerWeek)) : null;
@@ -117,7 +119,8 @@ export default function Tracker() {
       haptic('warning');
       return setError('Write an amount greater than zero.');
     }
-    if (!isValidISODate(date)) return setError('Pick a valid date.');
+    const occurredOn = pickedDate ?? today();
+    if (!isValidISODate(occurredOn)) return setError('Pick a valid date.');
     setSaving(true);
     try {
       const label = type === 'income' ? 'income' : categoryInfo(category, custom).label.toLowerCase();
@@ -134,7 +137,7 @@ export default function Tracker() {
           necessity: type === 'expense' ? necessity : null,
           note,
           cadence: repeat,
-          startOn: date,
+          startOn: occurredOn,
         });
         await applyDueRecurring(db, today(), currency);
         toast({ message: `${formatMoney(cents, currency)} ${label} saved · ${CADENCE_LABEL[repeat].toLowerCase()}`, undo: () => removeRecurringAndEntries(db, id) });
@@ -147,7 +150,7 @@ export default function Tracker() {
           merchant,
           note,
           category,
-          occurredOn: date,
+          occurredOn,
         });
         toast({ message: `${formatMoney(cents, currency)} ${label} saved`, undo: () => deleteTransaction(db, id) });
       }
@@ -155,6 +158,7 @@ export default function Tracker() {
       setMerchant('');
       setNote('');
       setRepeat('none');
+      setPickedDate(null);
       setPickedByHand(false);
       setGuessedFrom(null);
     } catch (e) {
@@ -279,7 +283,7 @@ export default function Tracker() {
         </>
       )}
       <CategorySheet open={sheet === 'category'} onClose={() => setSheet(null)} type={type} value={category} onChange={pickCategory} custom={custom} />
-      <DateSheet open={sheet === 'date'} onClose={() => setSheet(null)} value={date} onChange={setDate} />
+      <DateSheet open={sheet === 'date'} onClose={() => setSheet(null)} value={date} onChange={(d) => setPickedDate(d === today() ? null : d)} />
     </Screen>
   );
 }
