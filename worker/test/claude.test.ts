@@ -5,28 +5,26 @@ import { checkPrompt, createClaude, MODEL } from '../src/ai/claude';
 
 type Final = Partial<{ stop_reason: string; parsed_output: unknown }> | Error;
 
-/** Mimics messages.stream(): returns a stream whose finalMessage() resolves (or rejects) per call. */
+/** Mimics messages.parse(): resolves (or rejects) with the next result per call. */
 function fakeClient(...results: Final[]) {
   let call = 0;
-  const stream = vi.fn(() => {
+  const parse = vi.fn(async () => {
     const result = results[Math.min(call++, results.length - 1)];
-    return {
-      finalMessage: async () => {
-        if (result instanceof Error) throw result;
-        return { stop_reason: 'end_turn', parsed_output: null, ...result };
-      },
-    };
+    if (result instanceof Error) throw result;
+    return { stop_reason: 'end_turn', parsed_output: null, ...result };
   });
-  return { client: { messages: { stream } } as unknown as Anthropic, stream };
+  return { client: { messages: { parse } } as unknown as Anthropic, parse };
 }
 
 const scan = { image_base64: 'abc', media_type: 'image/jpeg' as const, currency: 'USD', locale: 'en-US', today: '2026-10-23' };
 
 describe('createClaude', () => {
-  it('streams the image at max effort with a structured-output format', async () => {
-    const { client, stream } = fakeClient({ parsed_output: { ok: true } });
+  it('sends the image at max effort with a structured-output format, as one unstreamed request', async () => {
+    const { client, parse } = fakeClient({ parsed_output: { ok: true } });
     await createClaude('k', client).scanReceipt(scan);
-    const [params, options] = stream.mock.calls[0] as unknown as [Record<string, any>, { signal: AbortSignal }];
+    const [params, options] = parse.mock.calls[0] as unknown as [Record<string, any>, { signal: AbortSignal; timeout: number }];
+    expect(params.stream).toBeUndefined();
+    expect(options.timeout).toBe(150_000);
     expect(params.model).toBe(MODEL);
     expect(MODEL).toBe('claude-haiku-5-5');
     expect(params.output_config.effort).toBe('max');
@@ -51,13 +49,13 @@ describe('createClaude', () => {
     const answer = { necessity: 'want', verdict: 'go', reason: 'ok', cheaper_alternative: null, questions: [] };
     const retried = fakeClient({ parsed_output: null }, { parsed_output: answer });
     await expect(createClaude('k', retried.client).checkPurchase({ item: 'x', price: 1, currency: 'USD' })).resolves.toEqual(answer);
-    expect(retried.stream).toHaveBeenCalledTimes(2);
+    expect(retried.parse).toHaveBeenCalledTimes(2);
 
     const empty = fakeClient({ parsed_output: null });
     await expect(createClaude('k', empty.client).checkPurchase({ item: 'x', price: 1, currency: 'USD' })).rejects.toMatchObject({
       code: 'ai_parse_failed',
     });
-    expect(empty.stream).toHaveBeenCalledTimes(2);
+    expect(empty.parse).toHaveBeenCalledTimes(2);
   });
 
   it('maps a user abort (deadline) to a 504', async () => {

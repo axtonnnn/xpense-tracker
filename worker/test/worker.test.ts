@@ -227,6 +227,18 @@ describe('Pro', () => {
   });
 });
 
+describe('usage counters', () => {
+  it('still answers when the counter can’t be written (free plan daily write limit)', async () => {
+    const { handle, env, kv } = setup({ env: { PAYMENTS: 'off' } });
+    kv.put = async () => {
+      throw new Error('KV put() limit exceeded for the day.');
+    };
+    const res = await handle(post('/v1/check', checkBody), env);
+    expect(res.status).toBe(200);
+    expect((await read(res)).result.verdict).toBe('wait');
+  });
+});
+
 describe('payments off', () => {
   const off = { PAYMENTS: 'off', REVENUECAT_SECRET_KEY: undefined };
 

@@ -133,7 +133,7 @@ Nothing is used for tracking or advertising.
 **Notes**
 
 ```text
-Sign-in: please use Sign in with Apple on the first screen. It creates an account in one step; Xpense has no passwords. (Sign-in with a 6-digit email code also works.)
+Sign-in: please use Sign in with Apple on the first screen. It creates an account in one step; Xpense has no passwords.
 
 AI features: before anything is sent, the app asks for permission (guideline 5.1.2(i)). The permission screen lists exactly what goes to our AI service, says that it runs on an outside AI provider, and links to the privacy policy, which names that provider: Anthropic (Claude API). All features are free, with monthly fair-use limits. To test: AI mode > Take photo (or Choose from photos) > any receipt. Reading takes 10 to 60 seconds. AI mode also has "Should I buy this?" and a monthly review.
 

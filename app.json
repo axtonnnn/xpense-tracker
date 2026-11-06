@@ -79,6 +79,7 @@
     },
     "extra": {
       "payments": false,
+      "emailSignIn": false,
       "apiUrl": "",
       "supabaseUrl": "",
       "supabaseKey": "",

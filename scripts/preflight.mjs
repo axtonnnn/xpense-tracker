@@ -2,7 +2,8 @@
 //
 //   npm run preflight            # config files, Supabase and the live AI server
 //   npm run preflight -- --ai    # also signs in with an email code and reads a sample receipt with the
-//                                # real AI (costs about half a cent; you type the code from the email)
+//                                # real AI (costs about half a cent; you type the code from the email).
+//                                # Needs email sign-in ("emailSignIn": true); otherwise test a scan in TestFlight.
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -31,6 +32,8 @@ if (/^https:\/\/[^/\s]+/.test(apiUrl)) ok(`AI server URL: ${apiUrl}`);
 else fail('expo.extra.apiUrl is not your AI server', 'Deploy the AI server (LAUNCH.md, step 3) and paste its https://… URL into app.json.');
 
 const payments = extra.payments === true;
+const emailSignIn = extra.emailSignIn === true;
+if (!emailSignIn) ok('Sign-in: Sign in with Apple only (no email sender or domain needed)');
 const rcKey = (extra.revenueCatIosKey ?? '').trim();
 if (!payments) ok('Payments are off: every feature is free, and RevenueCat isn’t needed yet');
 else if (/^appl_\w+$/.test(rcKey)) ok('RevenueCat iOS key');
@@ -99,7 +102,9 @@ if (/^https:\/\//.test(supabaseUrl) && supabaseKey && !/^sb_secret_/.test(supaba
       const settings = await res.json();
       if (settings.external?.apple) ok('Sign in with Apple is enabled');
       else fail('The Apple provider is off', 'Supabase → Authentication → Sign In / Providers → Apple: turn it on and add your bundle ID as a Client ID (LAUNCH.md, step 3).');
-      if (settings.external?.email) ok('Email sign-in is enabled');
+      if (!emailSignIn) {
+        // Apple only: the Email provider and its sender aren't used.
+      } else if (settings.external?.email) ok('Email sign-in is enabled');
       else fail('The Email provider is off', 'Supabase → Authentication → Sign In / Providers → Email: turn it on.');
       const table = await fetch(`${supabaseUrl}/rest/v1/records?select=id&limit=1`, { headers, signal: AbortSignal.timeout(15_000) });
       if (table.ok) ok('The records table exists (sync is ready)');
@@ -156,7 +161,8 @@ if (/^https:\/\//.test(apiUrl)) {
       else fail(`${path} answered ${status || 'nothing'}`, 'Redeploy the server: cd worker && npx wrangler deploy');
     }
 
-    const token = WITH_AI && anthropic === 'ok' && supabase === 'ok' ? await signInWithEmailCode() : null;
+    if (WITH_AI && !emailSignIn) note('Skipped the real AI scan: it signs in with an email code, and email sign-in is off', 'Scan a receipt in TestFlight instead (the server check above already confirmed your Anthropic key).');
+    const token = WITH_AI && emailSignIn && anthropic === 'ok' && supabase === 'ok' ? await signInWithEmailCode() : null;
     if (token) {
       section('Real AI scan (scripts/fixtures/sample-receipt.jpg, total 50.00)');
       console.log('  … reading the receipt; at max effort this can take up to a minute');

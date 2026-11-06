@@ -9,7 +9,7 @@ import { Hatch } from '@/components/marks';
 import { Appear, GrowX } from '@/components/motion';
 import { AppText, Button, Field, haptic, Notice, PressableScale, Screen } from '@/components/ui';
 import { AuthError, useAuth } from '@/lib/auth';
-import { ACCOUNTS_READY, PRIVACY_URL, TERMS_URL } from '@/lib/config';
+import { ACCOUNTS_READY, EMAIL_SIGN_IN, PRIVACY_URL, TERMS_URL } from '@/lib/config';
 import { colors, motion } from '@/theme/tokens';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -20,6 +20,8 @@ export default function SignIn() {
   const [busy, setBusy] = useState<'apple' | 'email' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const apple = appleAvailable && Platform.OS === 'ios';
+  // The email code only when it's switched on, or where Sign in with Apple isn't offered (no one is locked out).
+  const email6 = EMAIL_SIGN_IN || !apple;
 
   const signInApple = async () => {
     setError(null);
@@ -109,7 +111,7 @@ export default function SignIn() {
           </View>
         )}
 
-        {apple && (
+        {apple && email6 && (
           <View style={styles.or}>
             <View style={styles.orLine} />
             <AppText variant="caption" muted>
@@ -119,40 +121,42 @@ export default function SignIn() {
           </View>
         )}
 
-        <View style={{ marginTop: apple ? 18 : 36 }}>
-          <AppText variant="caption" muted>
-            Email
-          </AppText>
-          <View style={styles.emailRow}>
-            <View style={{ flex: 1 }}>
-              <Field
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                accessibilityLabel="Email"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                textContentType="emailAddress"
-                returnKeyType="send"
-                onSubmitEditing={sendCode}
-              />
+        {email6 && (
+          <View style={{ marginTop: apple ? 18 : 36 }}>
+            <AppText variant="caption" muted>
+              Email
+            </AppText>
+            <View style={styles.emailRow}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  accessibilityLabel="Email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  returnKeyType="send"
+                  onSubmitEditing={sendCode}
+                />
+              </View>
+              <PressableScale
+                onPress={sendCode}
+                disabled={!!busy}
+                haptics="light"
+                accessibilityRole="button"
+                accessibilityLabel="Email me a code"
+                style={styles.go}>
+                {busy === 'email' ? <ActivityIndicator color={colors.onInk} size="small" /> : <Icon name="arrow" size={20} color={colors.onInk} strokeWidth={1.5} />}
+              </PressableScale>
             </View>
-            <PressableScale
-              onPress={sendCode}
-              disabled={!!busy}
-              haptics="light"
-              accessibilityRole="button"
-              accessibilityLabel="Email me a code"
-              style={styles.go}>
-              {busy === 'email' ? <ActivityIndicator color={colors.onInk} size="small" /> : <Icon name="arrow" size={20} color={colors.onInk} strokeWidth={1.5} />}
-            </PressableScale>
+            <AppText variant="caption" muted style={{ marginTop: 10 }}>
+              We’ll email you a 6-digit code. No password to remember.
+            </AppText>
           </View>
-          <AppText variant="caption" muted style={{ marginTop: 10 }}>
-            We’ll email you a 6-digit code. No password to remember.
-          </AppText>
-        </View>
+        )}
       </Appear>
 
       {error && (

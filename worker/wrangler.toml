@@ -49,7 +49,8 @@ PRO_MONTHLY_REVIEWS = "30"
 binding = "USAGE"
 id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
-# Burst protection: at most 10 AI requests per account per minute.
+# Burst protection: at most 10 AI requests per account per minute. (If a deploy says rate limiting isn't
+# available on your plan, delete this block: the monthly limits still apply.)
 [[ratelimits]]
 name = "BURST_LIMITER"
 namespace_id = "1001"

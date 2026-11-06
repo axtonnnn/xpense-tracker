@@ -149,12 +149,16 @@ export async function recordUsage(
   access: Extract<Access, { ok: true }>,
   now: Date,
 ): Promise<{ trialRemaining: number | null }> {
+  // A counter that can't be written (the Workers free plan allows 1,000 KV writes a day) must not cost
+  // the person an answer that has already been paid for: it just goes uncounted.
+  const put = (key: string, value: string, options?: { expirationTtl?: number }) =>
+    env.USAGE.put(key, value, options).catch((e) => console.error('[usage] counter not saved', e));
   if (access.plan === 'trial') {
     const used = access.trialUsed + 1;
-    await env.USAGE.put(trialKey(userId), String(used));
+    await put(trialKey(userId), String(used));
     return { trialRemaining: Math.max(0, trialLimit(env) - used) };
   }
   const key = usageKey(userId, feature, now);
-  await env.USAGE.put(key, String((await readCount(env, key)) + 1), { expirationTtl: MONTH_TTL });
+  await put(key, String((await readCount(env, key)) + 1), { expirationTtl: MONTH_TTL });
   return { trialRemaining: null };
 }

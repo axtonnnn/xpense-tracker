@@ -111,9 +111,9 @@ cd worker && npm install && npm test              # AI Worker and website
 |---|---|
 | Apple Developer Program | $99 / year |
 | Claude Haiku 5.5 at max effort | ≈ $0.002–0.008 per receipt scan, ≈ $0.001–0.003 per buy check or review |
-| Cloudflare Workers Paid | $5 / month. The free plan's 10 ms of CPU per request is less than one streamed AI answer needs (measured 10–80 ms), and it allows only 1,000 usage-counter writes a day |
+| Cloudflare Workers | Free plan to start: AI answers arrive unstreamed, so a scan uses about 5 ms of CPU once warm (the limit is 10 ms; waiting doesn't count). Past 1,000 usage-counter writes a day, answers still arrive but go uncounted. Workers Paid ($5 / month) if it outgrows that |
 | Supabase | free plan to start (50,000 monthly users; idle free projects pause); Pro is $25 / month |
-| Domain + Resend (sign-in emails) | about $10 / year; Resend is free for 3,000 emails a month |
+| Domain + Resend (only for email sign-in, off by default) | about $10 / year; Resend is free for 3,000 emails a month |
 | RevenueCat | free tier for small apps (check current pricing) |
 
 A heavy Pro user (60 scans a month) costs about **$0.10–0.50/month** in AI. The Pro fair-use caps cap your worst case: an extreme user who maxes out all three caps (300 scans, 300 checks, 30 reviews) could cost up to about $3.40 a month. Lower `PRO_MONTHLY_SCANS`, `PRO_MONTHLY_CHECKS` or `PRO_MONTHLY_REVIEWS` in `worker/wrangler.toml` for a tighter ceiling, and change `PRO_MONTHLY_SCANS` in `src/lib/config.ts` to match (`npm run preflight` checks that they agree). To go back to the cheapest setting, change `EFFORT` in `worker/src/ai/claude.ts` to `'low'`.
@@ -124,6 +124,7 @@ A heavy Pro user (60 scans a month) costs about **$0.10–0.50/month** in AI. Th
 |---|---|---|
 | `app.json` → `extra` | `apiUrl` | Worker URL (`demo` = sample answers in dev builds) |
 | | `payments` | `false` while Xpense is free; `true` once Pro is on sale (with `PAYMENTS = "on"` on the server) |
+| | `emailSignIn` | `false`: Sign in with Apple only, so no email sender or domain is needed. `true` adds the 6-digit email code (needs the email steps in LAUNCH.md) |
 | | `supabaseUrl`, `supabaseKey` | Supabase project URL and **publishable** key (never the secret key) |
 | | `revenueCatIosKey`, `revenueCatAndroidKey` | RevenueCat public SDK keys |
 | | `privacyUrl`, `termsUrl`, `supportUrl` | Optional overrides. By default they are the AI server's `/privacy`, `/terms` and `/support` pages |

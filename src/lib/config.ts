@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 type Extra = {
   apiUrl?: string;
   payments?: boolean;
+  emailSignIn?: boolean;
   supabaseUrl?: string;
   supabaseKey?: string;
   revenueCatIosKey?: string;
@@ -52,6 +53,13 @@ export const PREVIEW_ACCOUNT = __DEV__ && !ACCOUNTS_READY;
  * PAYMENTS in worker/wrangler.toml once the subscriptions and RevenueCat are set up (LAUNCH.md).
  */
 export const PAYMENTS = extra.payments === true;
+
+/**
+ * Whether sign-in also offers a 6-digit email code (app.json → extra.emailSignIn). Off, iPhone, iPad and Mac
+ * use Sign in with Apple only, so no email sender or domain is needed. Turn it on for Android, or for anyone
+ * without an Apple ID, after setting up the email steps in LAUNCH.md.
+ */
+export const EMAIL_SIGN_IN = extra.emailSignIn === true;
 
 export const PRO_ENTITLEMENT = 'pro';
 // Shown in the app's copy; keep them equal to FREE_TRIAL_SCANS and PRO_MONTHLY_SCANS in worker/wrangler.toml.

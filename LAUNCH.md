@@ -9,10 +9,10 @@ The app, the AI server and the App Store listing are ready. What's left are the 
 | | Cost |
 |---|---|
 | Apple Developer Program | $99 a year |
-| Cloudflare Workers Paid (runs the AI server and the privacy and support pages) | $5 a month |
 | Anthropic API (the AI, for everyone while Xpense is free) | pay as you go, about $0.002–0.008 per receipt scan; your monthly spend limit caps it |
-| A domain name (for sign-in emails) | about $10 a year |
-| Supabase (accounts and sync), Resend (email), Expo EAS (builds) | free plans are enough to launch |
+| Supabase (accounts and sync), Cloudflare Workers (the AI server and the privacy and support pages), Expo EAS (builds) | free plans are enough to launch |
+
+Only if you need them later: Cloudflare Workers Paid ($5 a month) if the server outgrows the free plan (see [If something goes wrong](#if-something-goes-wrong)), and a domain (about $10 a year) if you turn on email sign-in.
 
 **Time:** about 4 hours of your own time. On top of that, Apple takes a day or two to approve your developer membership and usually 1 to 3 days to review the app.
 
@@ -53,19 +53,19 @@ Start here: approval can take a day or two, and you can do steps 2 to 5 while yo
 
 ## Step 3. Set up accounts and sync (Supabase)
 
-People sign in with Apple or with a 6-digit code sent to their email, and their budget syncs between their iPhone, iPad and Mac. Supabase runs both.
+People sign in with Apple, and their budget syncs between their iPhone, iPad and Mac. Supabase runs both. (Sign-in with a 6-digit email code is built in but off, `"emailSignIn": false` in `app.json`, so you need no email sender or domain. The two email items below are only for when you turn it on, for example for Android.)
 
 - [ ] Sign up at [supabase.com](https://supabase.com) and create a project called `xpense`. Pick the region closest to most of your users, and save the database password somewhere safe (the app doesn't need it).
   - The free plan is enough to launch. Free projects pause after about a week with no activity at all; once people use the app every day that doesn't happen. Upgrading to Pro ($25 a month) removes the pause.
 - [ ] **Create the table.** Open **SQL Editor → New query**, paste the whole of [`supabase/schema.sql`](supabase/schema.sql), and press **Run**. It creates one table, `records`, where each account can only see its own rows.
   - Already ran it for an earlier version? Run it again: it's safe to repeat, and the savings goal needs it to sync.
 - [ ] **Sign in with Apple.** Open **Authentication → Sign In / Providers → Apple** and turn it on. Under **Client IDs**, enter your bundle ID: `com.axtonnnn.xpense` (or your own, see step 6). Leave the other fields empty: the app signs in with Apple's own sheet, so no secret key is needed. Save.
-- [ ] **Email codes.**
+- [ ] **Email codes** (only with `"emailSignIn": true`).
   - In **Authentication → Sign In / Providers → Email**: make sure Email is on, and set **Email OTP Length** to `6`.
   - In **Authentication → Emails → Templates** (older dashboards: **Email Templates**), open **Magic Link**. Set the subject to `Your Xpense code`, and replace the whole body with the contents of [`supabase/email-code.html`](supabase/email-code.html): the sign-in code in the app's style. Save.
   - Do the same for the **Confirm signup** template (new accounts get that one).
   - Leave **Email OTP Expiration** at its default of one hour; the email says so.
-- [ ] **Send emails from your own domain.** Supabase's built-in email is only for testing (it sends a few emails an hour, and only to your own team), so real users need your own sender:
+- [ ] **Send emails from your own domain** (only with `"emailSignIn": true`). Supabase's built-in email is only for testing (it sends a few emails an hour, and only to your own team), so real users need your own sender:
   1. Buy a domain if you don't have one (any registrar, or Cloudflare Registrar).
   2. Sign up at [resend.com](https://resend.com) (free for 3,000 emails a month), add your domain under **Domains**, and add the DNS records it shows. Wait until it says **Verified**.
   3. In Resend, create an **API key**.
@@ -80,9 +80,10 @@ People sign in with Apple or with a 6-digit code sent to their email, and their 
 
 The server keeps your API key off the phone, checks each person's sign-in, applies the monthly AI limits, deletes accounts on request, and hosts the **privacy policy**, **terms** and **support** pages that App Store Connect asks for. (It also serves a simple home page about Xpense; you don't need to use it yet.)
 
-- [ ] Sign up at [dash.cloudflare.com](https://dash.cloudflare.com). Then open **Workers & Pages → Plans** and choose **Workers Paid** ($5 a month). The free plan is not enough:
-  - It allows about 10 ms of computing time per request, and one AI answer measured 10 to 80 ms.
-  - It allows only 1,000 usage-counter writes a day.
+- [ ] Sign up at [dash.cloudflare.com](https://dash.cloudflare.com). The free plan is enough to start:
+  - It allows 10 ms of computing time per request; waiting for the AI doesn't count, and a scan measured about 5 ms once the server is warm.
+  - It allows 1,000 usage-counter writes a day. Past that, answers still arrive; they just aren't counted toward the monthly limits that day.
+  - If scans start failing with a server error, open **Workers & Pages → Plans** and choose **Workers Paid** ($5 a month). Nothing else changes.
 - [ ] Log in and create the usage store:
 
   ```bash
@@ -282,6 +283,8 @@ If something goes wrong with Pro:
 | "Sign in with Apple didn't work" | In Supabase, the Apple provider must be on with your exact bundle ID as a Client ID. The App ID needs the Sign In with Apple capability (step 6). |
 | The app says "Please sign in again to use the AI" | The server's `SUPABASE_URL` must be your project's URL, exactly as in `app.json`. Preflight checks this. |
 | The app says it reached this month's limit for an AI feature | That's the fair-use limit (300 scans, 300 buy checks and 30 reviews per account a month). Change `PRO_MONTHLY_SCANS`, `PRO_MONTHLY_CHECKS` or `PRO_MONTHLY_REVIEWS` in `worker/wrangler.toml` and redeploy. |
+| Scans or buy checks fail with a server error, and `npx wrangler tail` shows "exceeded CPU" or "resource limits" | The Workers free plan's 10 ms limit. Choose **Workers Paid** ($5 a month) in **Workers & Pages → Plans**; nothing else changes. |
+| `npx wrangler deploy` says rate limiting isn't available on your plan | Delete the `[[ratelimits]]` block (4 lines) in `worker/wrangler.toml` and deploy again. The monthly limits still apply. |
 | The app says "The AI service had a problem" | Check your Anthropic credit (console.anthropic.com → Billing), then run `npm run preflight -- --ai`. |
 | Entries don't show up on another device | Both must be signed in to the same account (Settings shows which). Settings → **Sync now** shows whether the device is online. Check the `records` table exists (preflight). |
 | Entries sync but the savings goal doesn't | Your Supabase table is from before the savings goal. Run `supabase/schema.sql` again (step 3); the goal syncs on the next **Sync now**. |

@@ -100,8 +100,8 @@ export function checkPrompt(req: CheckRequest): string {
 }
 
 export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
-  // `timeout` bounds the wait for the response to start; DEADLINE_MS bounds the whole answer.
-  const anthropic = client ?? new Anthropic({ apiKey, maxRetries: 2, timeout: 60_000 });
+  // Each answer arrives whole, bounded by DEADLINE_MS (the per-request timeout and the abort signal).
+  const anthropic = client ?? new Anthropic({ apiKey, maxRetries: 2, timeout: DEADLINE_MS });
 
   async function ask<T>(
     schema: z.ZodType<T>,
@@ -113,19 +113,20 @@ export function createClaude(apiKey: string, client?: Anthropic): AIProvider {
     for (let attempt = 1; ; attempt++) {
       let message;
       try {
-        // Streamed: at max effort the model may think for many thousands of tokens before answering.
-        message = await anthropic.messages
-          .stream(
-            {
-              model: MODEL,
-              max_tokens: maxTokens,
-              system,
-              messages: [{ role: 'user', content }],
-              output_config: { effort: EFFORT, format: zodOutputFormat(schema as z.ZodType<T> & z.ZodObject) },
-            },
-            { signal },
-          )
-          .finalMessage();
+        // Not streamed: the answer arrives in one piece, however long the model thinks. Streaming at max
+        // effort means handling thousands of small updates, more computing time than the Workers free
+        // plan allows (10 ms a request; waiting for the answer doesn't count). The explicit timeout also
+        // tells the SDK this long, unstreamed request is intended.
+        message = await anthropic.messages.parse(
+          {
+            model: MODEL,
+            max_tokens: maxTokens,
+            system,
+            messages: [{ role: 'user', content }],
+            output_config: { effort: EFFORT, format: zodOutputFormat(schema as z.ZodType<T> & z.ZodObject) },
+          },
+          { signal, timeout: DEADLINE_MS },
+        );
       } catch (e) {
         if (e instanceof Anthropic.APIUserAbortError || signal.aborted) {
           throw new AIError(504, 'ai_timeout', 'The AI took too long to answer. Please try again.');
