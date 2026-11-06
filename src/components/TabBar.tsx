@@ -11,6 +11,7 @@ import { AppText, Avatar, haptic } from './ui';
 import { useSettings } from '@/db/settings';
 import { useSync } from '@/db/SyncProvider';
 import { useAuth } from '@/lib/auth';
+import { PAYMENTS } from '@/lib/config';
 import { usePro } from '@/lib/pro';
 import { colors, fonts, motion, useWide } from '@/theme/tokens';
 
@@ -103,7 +104,7 @@ function SideBar(props: BottomTabBarProps) {
   const { user } = useAuth();
   const settings = useSettings();
   const { status, lastSyncedAt } = useSync();
-  const { isPro } = usePro();
+  const isPro = usePro().isPro && PAYMENTS;
   const name = settings?.name || user?.name || user?.email?.split('@')[0] || 'You';
   const synced =
     status === 'local' ? 'On this device' : status === 'offline' ? 'Offline' : lastSyncedAt ? `Synced ${sinceText(lastSyncedAt)}` : 'Syncing…';

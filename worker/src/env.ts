@@ -32,6 +32,11 @@ export interface Env {
   PRO_MONTHLY_SCANS?: string;
   PRO_MONTHLY_CHECKS?: string;
   PRO_MONTHLY_REVIEWS?: string;
+  /**
+   * "on" once Xpense Pro is on sale. Otherwise (the default) every signed-in account gets every AI feature
+   * within the monthly limits, RevenueCat is never asked, and the pages leave out Pro and purchases.
+   */
+  PAYMENTS?: string;
   /** Local development only: treat every account as Pro. Never set this in production. */
   ALLOW_ALL_PRO?: string;
   /** Shown on the privacy policy, terms and support pages (src/pages.ts). */

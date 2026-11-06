@@ -156,7 +156,7 @@ function Failed({ onClose, onRetry, onType }: { onClose: () => void; onRetry: ()
             ))}
           </View>
           <AppText variant="caption" muted style={{ marginTop: 12 }}>
-            Scans that fail don’t use up your free scans.
+            Scans that fail aren’t counted.
           </AppText>
         </Appear>
         <View style={{ marginTop: 'auto', gap: 10, paddingTop: 24 }}>

@@ -8,7 +8,7 @@ import Purchases, {
   type PurchasesPackage,
 } from 'react-native-purchases';
 
-import { PRO_ENTITLEMENT, REVENUECAT_KEY } from './config';
+import { PAYMENTS, PRO_ENTITLEMENT, REVENUECAT_KEY } from './config';
 import { useSettings } from '@/db/settings';
 
 type ProState = {
@@ -34,6 +34,7 @@ let configuredFor: string | null | undefined;
 /**
  * Pro status for the signed-in account. RevenueCat knows each customer by their Xpense account id, so a
  * subscription follows the person to every device they sign in on (the AI server checks the same id).
+ * While payments are off (config PAYMENTS), everyone has every feature and RevenueCat isn't started.
  */
 export function ProProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const settings = useSettings();
@@ -49,7 +50,7 @@ export function ProProvider({ userId, children }: { userId: string; children: Re
   }, []);
 
   useEffect(() => {
-    if (!REVENUECAT_KEY) return;
+    if (!PAYMENTS || !REVENUECAT_KEY) return;
     let cancelled = false;
     (async () => {
       try {
@@ -112,7 +113,7 @@ export function ProProvider({ userId, children }: { userId: string; children: Re
 
   const trialEligible = useCallback((productId: string) => Platform.OS !== 'ios' || eligibleIds.includes(productId), [eligibleIds]);
 
-  const isPro = entitled || (__DEV__ && !!settings?.devPro);
+  const isPro = !PAYMENTS || entitled || (__DEV__ && !!settings?.devPro);
 
   const value = useMemo(
     () => ({ isPro, storeReady, offering, managementURL, trialEligible, purchase, restore, manage }),

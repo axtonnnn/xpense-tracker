@@ -55,7 +55,7 @@ describe('public pages', () => {
   });
 
   it('shows the fair-use limits the server enforces', async () => {
-    const { html } = await get('/terms', { ...filled, PRO_MONTHLY_SCANS: '250', FREE_TRIAL_SCANS: '5' });
+    const { html } = await get('/terms', { ...filled, PAYMENTS: 'on', PRO_MONTHLY_SCANS: '250', FREE_TRIAL_SCANS: '5' });
     expect(html).toContain('250 receipt scans, 300 purchase checks and 30 monthly reviews');
     expect(html).toContain('Free accounts include 5 trial AI scans');
     expect(html).toContain('the laws of the State of New York, USA');
@@ -68,7 +68,7 @@ describe('public pages', () => {
   });
 
   it('serves the home page, tolerates a trailing slash and answers HEAD', async () => {
-    const { html } = await get('/');
+    const { html } = await get('/', { ...filled, PAYMENTS: 'on' });
     expect(html).toContain('<title>Xpense: spend on what matters</title>');
     expect(html).toContain('<span class="w" style="--i:3">matters.</span>');
     expect(html).toContain('How it works');
@@ -95,8 +95,27 @@ describe('public pages', () => {
   });
 
   it('shows Pro prices only when they are set', async () => {
-    expect((await get('/', { ...filled, PRO_PRICES: '$2.99 a month or $19.99 a year' })).html).toContain('<h3>Pro · $2.99 a month or $19.99 a year</h3>');
-    expect((await get('/')).html).toContain('<h3>Xpense Pro</h3>');
+    expect((await get('/', { ...filled, PAYMENTS: 'on', PRO_PRICES: '$2.99 a month or $19.99 a year' })).html).toContain('<h3>Pro · $2.99 a month or $19.99 a year</h3>');
+    expect((await get('/', { ...filled, PAYMENTS: 'on' })).html).toContain('<h3>Xpense Pro</h3>');
+  });
+
+  it('leaves out Pro and purchases while payments are off', async () => {
+    const home = (await get('/')).html;
+    expect(home).not.toContain('Xpense Pro');
+    expect(home).not.toContain('href="/#pro"');
+    const privacy = (await get('/privacy')).html;
+    expect(privacy).not.toContain('RevenueCat');
+    expect(privacy).toContain('To apply the monthly fair-use limits');
+    const terms = (await get('/terms')).html;
+    expect(terms).toContain('Xpense is free.');
+    expect(terms).not.toContain('auto-renewing');
+    const support = (await get('/support')).html;
+    expect(support).not.toContain('cancel my subscription');
+    expect(support).toContain('Every account can use up to 300 receipt scans');
+    const paid = (await get('/privacy', { ...filled, PAYMENTS: 'on' })).html;
+    expect(paid).toContain('RevenueCat');
+    expect(paid).toContain('<td>RevenueCat</td>');
+    expect(paid).not.toContain('payments -->');
   });
 
   it('loads its fonts from this site only', async () => {
@@ -112,6 +131,7 @@ describe('public pages', () => {
     expect(health).toEqual({
       ok: true,
       configured: {
+        payments: false,
         anthropic_key: true,
         revenuecat_key: true,
         supabase_url: false,

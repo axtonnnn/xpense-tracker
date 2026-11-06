@@ -27,14 +27,18 @@ LAST_UPDATED = "REPLACE with the date you publish, e.g. 1 November 2026"
 # Optional: once the app is live, its store links add download buttons to the home page.
 APP_STORE_URL = ""
 PLAY_STORE_URL = ""
-# Pro's prices on the home page. Keep them the same as in App Store Connect, or leave empty to hide them.
+# Xpense Pro: "off" until you sell it. Off, every signed-in account gets every AI feature within the monthly
+# limits below, RevenueCat isn't needed, and the pages leave out Pro and purchases. Turn it "on" together
+# with "payments": true in app.json (LAUNCH.md, "Turning on Xpense Pro").
+PAYMENTS = "off"
+# Pro's prices on the home page while payments are on. Keep them the same as App Store Connect, or empty.
 PRO_PRICES = "$2.99 a month or $19.99 a year"
 
 # Accounts: your Supabase project URL (Project Settings → API). Sign-in tokens are checked against it.
 SUPABASE_URL = "REPLACE with your Supabase project URL, e.g. https://abcd1234.supabase.co"
 
 FREE_TRIAL_SCANS = "3"
-# Pro fair-use caps per calendar month. At max effort each scan costs ≈ $0.002–0.008,
+# Fair-use caps per account per calendar month (for everyone while payments are off, for Pro after). At max effort each scan costs ≈ $0.002–0.008,
 # so 300 scans is at most ≈ $2.40 for an extreme user; lower these to tighten worst-case cost.
 PRO_MONTHLY_SCANS = "300"
 PRO_MONTHLY_CHECKS = "300"

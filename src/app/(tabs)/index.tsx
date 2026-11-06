@@ -34,6 +34,7 @@ import {
   type SafeToSpend,
 } from '@/lib/budget';
 import { categoryInfo } from '@/lib/categories';
+import { FREE_TRIAL_SCANS, PAYMENTS } from '@/lib/config';
 import { addDays, dayHeading, endOfMonth, formatDay, ordinal, parseISODate, startOfMonth, today } from '@/lib/dates';
 import { checkinDue, movesBetween } from '@/lib/goal';
 import { formatFigure, formatMoney } from '@/lib/money';
@@ -374,7 +375,12 @@ function StartHere({ index, recurring, scanned }: { index: string; recurring: Re
       sub: 'They stay out of what’s safe to spend',
       go: () => router.navigate('/tracker'),
     },
-    { done: scanned, title: 'Scan your first receipt', sub: '3 free scans, then Pro', go: () => router.navigate('/ai') },
+    {
+      done: scanned,
+      title: 'Scan your first receipt',
+      sub: PAYMENTS ? `${FREE_TRIAL_SCANS} free scans, then Pro` : 'The AI types it in for you',
+      go: () => router.navigate('/ai'),
+    },
   ];
   return (
     <View>

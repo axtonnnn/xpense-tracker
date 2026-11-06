@@ -1,5 +1,6 @@
 // Who may use which AI feature: Pro subscribers (checked with RevenueCat on the server, so a
-// modified app can't unlock it), plus a small free trial of receipt scans for everyone else.
+// modified app can't unlock it), plus a small free trial of receipt scans for everyone else. Until
+// payments are on (PAYMENTS = "on"), every signed-in account has every feature within the monthly limits.
 import type { KeyStatus } from './ai/claude';
 import type { Env } from './env';
 
@@ -23,6 +24,9 @@ export function monthlyCap(env: Env, feature: Feature): number {
 }
 
 export const trialLimit = (env: Env) => Number(env.FREE_TRIAL_SCANS ?? 3);
+
+/** Whether Xpense Pro is on sale. Off (the default), nobody needs Pro and RevenueCat isn't used. */
+export const paymentsOn = (env: Env) => /^(on|true|1)$/i.test(env.PAYMENTS?.trim() ?? '');
 const trialKey = (id: string) => `trial:${id}`;
 const usageKey = (id: string, feature: Feature, now: Date) => `usage:${id}:${now.toISOString().slice(0, 7)}:${feature}`;
 
@@ -71,13 +75,15 @@ export async function checkAccess(
   feature: Feature,
   deps: { fetchImpl: typeof fetch; now: Date },
 ): Promise<Access> {
-  let pro = false;
+  let pro = !paymentsOn(env);
   let storeDown = false;
-  try {
-    pro = await isPro(env, userId, deps.fetchImpl, deps.now);
-  } catch (e) {
-    console.error('[entitlement]', e);
-    storeDown = true;
+  if (!pro) {
+    try {
+      pro = await isPro(env, userId, deps.fetchImpl, deps.now);
+    } catch (e) {
+      console.error('[entitlement]', e);
+      storeDown = true;
+    }
   }
 
   if (pro) {

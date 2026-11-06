@@ -13,7 +13,7 @@ import { useLiveQuery } from '@/db/live';
 import { setSettings, useSettings } from '@/db/settings';
 import { listRecentScans } from '@/db/transactions';
 import { ApiError, NeedsProError } from '@/lib/api';
-import { FREE_TRIAL_SCANS } from '@/lib/config';
+import { FREE_TRIAL_SCANS, PAYMENTS } from '@/lib/config';
 import { formatDay, parseISODate, today } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
@@ -46,7 +46,7 @@ export default function AIMode() {
 
   const fail = (e: unknown, feature: string) => {
     haptic('warning');
-    if (e instanceof NeedsProError) {
+    if (e instanceof NeedsProError && PAYMENTS) {
       if (feature === 'ai_scan') setSettings(db, { trial_remaining: 0 });
       requirePro(feature);
     } else {
@@ -88,9 +88,11 @@ export default function AIMode() {
       <PageTitle
         title="AI mode"
         right={
-          <AppText variant="caption" muted style={{ marginBottom: 8 }}>
-            {isPro ? 'Pro' : trialLeft > 0 ? `${trialLeft} free ${trialLeft === 1 ? 'scan' : 'scans'} left` : 'Free scans used'}
-          </AppText>
+          PAYMENTS ? (
+            <AppText variant="caption" muted style={{ marginBottom: 8 }}>
+              {isPro ? 'Pro' : trialLeft > 0 ? `${trialLeft} free ${trialLeft === 1 ? 'scan' : 'scans'} left` : 'Free scans used'}
+            </AppText>
+          ) : undefined
         }
       />
       <AppText muted style={{ marginTop: 12 }}>

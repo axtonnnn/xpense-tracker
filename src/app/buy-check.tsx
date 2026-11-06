@@ -15,6 +15,7 @@ import { listBetween } from '@/db/transactions';
 import { budgetContext } from '@/lib/ai-context';
 import { ApiError, checkPurchase, NeedsProError } from '@/lib/api';
 import { hourlyRateCents, hoursOfWork, safeToSpend } from '@/lib/budget';
+import { PAYMENTS } from '@/lib/config';
 import { endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
 import { movesBetween } from '@/lib/goal';
 import { centsToInput, formatFigure, formatMoney, fromCents, parseAmount } from '@/lib/money';
@@ -87,7 +88,7 @@ export default function BuyCheck() {
       setResult(answer);
     } catch (e) {
       haptic('warning');
-      if (e instanceof NeedsProError) requirePro('ai_check');
+      if (e instanceof NeedsProError && PAYMENTS) requirePro('ai_check');
       else setError(e instanceof ApiError || e instanceof Error ? e.message : 'Something went wrong. Please try again.');
     } finally {
       setBusy(false);

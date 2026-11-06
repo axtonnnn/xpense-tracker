@@ -20,7 +20,7 @@ Xpense ("we", "us") is a budgeting app that helps you track income and expenses 
 |---|---|
 | Your email address (or, with Sign in with Apple, the address Apple gives us, which can be a private relay address) | To sign you in and to send sign-in codes |
 | Your first name, if you give it (from Apple on your first sign-in, or typed during setup) | To greet you in the app |
-| An account ID (a random identifier) | To keep your data together and link your Pro subscription |
+| An account ID (a random identifier) | To keep your data together<!-- payments --> and link your Pro subscription<!-- /payments --> |
 
 Accounts are run by **Supabase**, our sign-in and database provider. Sign-in codes are sent by email through our email provider.
 
@@ -35,7 +35,7 @@ Accounts are run by **Supabase**, our sign-in and database provider. Sign-in cod
 
 Your account data is stored by Supabase in a database protected by row-level security: each account can only read and change its own records. It's encrypted in transit (HTTPS) and at rest. We access it only to keep the service running, to help you when you ask, or when the law requires it.
 
-You can export your entries at any time with **Settings → Export as CSV** (Pro).
+You can export your entries at any time with **Settings → Export as CSV**<!-- payments --> (Pro)<!-- /payments -->.
 
 ## AI features (optional)
 
@@ -55,11 +55,13 @@ AI answers can contain mistakes. Always check amounts before saving.
 
 ## Usage counters
 
-To give free accounts their {{FREE_TRIAL_SCANS}} trial scans and to apply Pro's monthly fair-use limits, our AI service keeps small counters linked to your account ID: how many AI requests you made, and in which month. Monthly counters expire after about 40 days. They are deleted when you delete your account.
+<!-- payments -->To give free accounts their {{FREE_TRIAL_SCANS}} trial scans and to apply Pro's monthly fair-use limits<!-- /payments --><!-- free -->To apply the monthly fair-use limits<!-- /free -->, our AI service keeps small counters linked to your account ID: how many AI requests you made, and in which month. Monthly counters expire after about 40 days. They are deleted when you delete your account.
 
+<!-- payments -->
 ## Purchases
 
 Subscriptions are processed by Apple (App Store) or Google (Google Play). We never see your payment details. We use **RevenueCat** to manage subscription status. RevenueCat receives your account ID and purchase information (product, dates, store transaction IDs) from the store, so Pro works on every device you sign in on. See [RevenueCat's privacy policy](https://www.revenuecat.com/privacy).
+<!-- /payments -->
 
 ## Service providers
 
@@ -69,14 +71,14 @@ Subscriptions are processed by Apple (App Store) or Google (Google Play). We nev
 | Our email provider | Sends sign-in codes |
 | Cloudflare | Hosts our AI service and this website; processes network data such as IP addresses to deliver and protect them |
 | Anthropic | Runs the AI model that reads receipts and answers questions |
-| RevenueCat | Manages subscription status |
-| Apple / Google | Sign in with Apple, app distribution and payments |
+<!-- payments -->| RevenueCat | Manages subscription status |<!-- /payments -->
+| Apple / Google | Sign in with Apple, app distribution<!-- payments --> and payments<!-- /payments --> |
 
 We do not use analytics, advertising or tracking SDKs, and we do not sell or share personal data for advertising. This website uses no cookies or analytics.
 
 ## Deleting your account
 
-In the app, open **Settings → Delete account**. This deletes your sign-in, every entry, receipt line, repeat and setting in your account, your usage counters and your RevenueCat customer record, and erases the copy on that device. Copies on your other devices are removed the next time they open Xpense. If you subscribe to Pro, cancel the subscription in your App Store or Google Play account too; deleting your account doesn't stop the store from charging you.
+In the app, open **Settings → Delete account**. This deletes your sign-in, every entry, receipt line, repeat and setting in your account, your usage counters<!-- payments --> and your RevenueCat customer record<!-- /payments -->, and erases the copy on that device. Copies on your other devices are removed the next time they open Xpense.<!-- payments --> If you subscribe to Pro, cancel the subscription in your App Store or Google Play account too; deleting your account doesn't stop the store from charging you.<!-- /payments -->
 
 Signing out keeps your account; the device keeps its copy until you sign in again.
 

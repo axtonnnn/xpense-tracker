@@ -4,7 +4,8 @@
 //   1. EXPO_PUBLIC_API_URL=demo npx expo start --web           (sample AI answers, local preview account)
 //   2. CHROME_PATH=/path/to/chrome npm run store:screenshots   (or with Google Chrome installed: npm run store:screenshots)
 //
-// Writes docs/app-store/screenshots/*.jpg and docs/app-store/iap-review.jpg. The layout follows the Gallery
+// Writes docs/app-store/screenshots/*.jpg, plus docs/app-store/iap-review.jpg while payments are on ("payments" in
+// app.json; with them off there is no Pro screen to show). The layout follows the Gallery
 // design: an index number and a light headline on bone paper, the real screen inside a thin ink outline.
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -12,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PAYMENTS = JSON.parse(readFileSync(join(ROOT, 'app.json'), 'utf8')).expo.extra?.payments === true;
 const APP_URL = process.env.APP_URL ?? 'http://localhost:8081';
 const OUT = join(ROOT, 'docs', 'app-store');
 const RECEIPT = join(ROOT, 'scripts', 'fixtures', 'sample-receipt.jpg');
@@ -67,10 +69,10 @@ async function freshApp(width, height, scale) {
 
 const openSettings = (page) => page.getByLabel(/Settings and account|Account and settings/).first().click();
 
-/** Settings → Developer: Simulate Pro and sample data (both exist only in development builds). */
+/** Settings → Developer: Simulate Pro (while payments are on) and sample data, both development-only. */
 async function withSampleData({ page, tap }) {
   await openSettings(page);
-  await page.getByRole('switch', { name: 'Simulate Pro' }).click();
+  if (PAYMENTS) await page.getByRole('switch', { name: 'Simulate Pro' }).click();
   await tap('Load sample data');
   await page.getByText('Sample data loaded').waitFor();
   await page.goBack();
@@ -82,7 +84,7 @@ const ipadShots = {};
 mkdirSync(join(OUT, 'screenshots'), { recursive: true });
 
 // In-app purchase review screenshot: the whole Pro screen, as a free user sees it.
-{
+if (PAYMENTS) {
   const { page, tap } = await freshApp(390, 1400, 3);
   await openSettings(page);
   await tap('See Pro plans');
@@ -145,7 +147,8 @@ mkdirSync(join(OUT, 'screenshots'), { recursive: true });
   ipadShots['1-dashboard'] = await page.screenshot();
   await page.getByRole('tab', { name: 'History' }).click();
   await page.waitForTimeout(1000);
-  await page.getByRole('button', { name: /Green Valley Market/ }).first().click();
+  // Early in a month the weekly groceries may not be there yet; rent always is (the 1st).
+  await page.getByRole('button', { name: /Green Valley Market|Corner Café|Rent/ }).first().click();
   await page.waitForTimeout(1200);
   ipadShots['2-history'] = await page.screenshot();
   await page.context().close();
@@ -220,7 +223,7 @@ h1{margin-top:20px;font-size:116px;white-space:nowrap}`,
   await composer.screenshot({ path: join(OUT, 'screenshots', `ipad-${name}.jpg`), type: 'jpeg', quality: 90 });
   console.log(`docs/app-store/screenshots/ipad-${name}.jpg`);
 }
-console.log('docs/app-store/iap-review.jpg');
+if (PAYMENTS) console.log('docs/app-store/iap-review.jpg');
 await browser.close();
 
 // Screenshots from earlier designs.

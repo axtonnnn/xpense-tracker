@@ -17,7 +17,7 @@ import { useSync } from '@/db/SyncProvider';
 import { allTransactions, deleteAllData } from '@/db/transactions';
 import { ApiError, deleteAccountOnServer } from '@/lib/api';
 import { useAuth, useUser } from '@/lib/auth';
-import { PRIVACY_URL, PRO_MONTHLY_SCANS, SUPPORT_URL, TERMS_URL } from '@/lib/config';
+import { PAYMENTS, PRIVACY_URL, PRO_MONTHLY_SCANS, SUPPORT_URL, TERMS_URL } from '@/lib/config';
 import { today } from '@/lib/dates';
 import { shareCSV } from '@/lib/export';
 import { centsToInput, CURRENCIES, currencySymbol, formatMoney, parseAmount } from '@/lib/money';
@@ -26,6 +26,11 @@ import { loadSampleData } from '@/lib/sample-data';
 import { colors } from '@/theme/tokens';
 
 const SHOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD'];
+
+// Sections are numbered as shown: Xpense Pro (02) only appears while payments are on.
+const num = PAYMENTS
+  ? { account: '01', you: '03', money: '04', device: '05', more: '06' }
+  : { account: '01', you: '02', money: '03', device: '04', more: '05' };
 
 export default function SettingsScreen() {
   const settings = useSettings();
@@ -184,7 +189,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
       <TopBar onBack={() => router.back()} />
       <PageTitle title="Settings" style={{ marginTop: 24 }} />
 
-      <SectionHeader index="01" title="Account" style={{ marginTop: 40 }} />
+      <SectionHeader index={num.account} title="Account" style={{ marginTop: 40 }} />
       <View style={styles.account}>
         <Avatar name={shownName} size={52} />
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -209,27 +214,31 @@ function SettingsForm({ settings }: { settings: Settings }) {
         <Button compact title="Sign out" kind="secondary" onPress={doSignOut} loading={busy === 'signout'} style={{ flex: 1 }} />
       </View>
 
-      <Rule />
-      <SectionHeader index="02" title="Xpense Pro" />
-      {pro.isPro ? (
+      {PAYMENTS && (
         <>
-          <AppText muted style={{ marginTop: 12 }}>
-            Thank you. AI scanning, buy checks, monthly reviews and yearly trends are on for all your devices.
-          </AppText>
-          <Button title="Manage subscription" kind="secondary" onPress={() => pro.manage()} style={{ marginTop: 16 }} />
-        </>
-      ) : (
-        <>
-          <AppText muted style={{ marginTop: 12 }}>
-            Up to {PRO_MONTHLY_SCANS} receipt scans a month, “Should I buy this?” against your budget, monthly reviews, yearly trends and CSV export.
-          </AppText>
-          <Button title="See Pro plans" onPress={() => router.push('/paywall')} style={{ marginTop: 16 }} />
+          <Rule />
+          <SectionHeader index="02" title="Xpense Pro" />
+          {pro.isPro ? (
+            <>
+              <AppText muted style={{ marginTop: 12 }}>
+                Thank you. AI scanning, buy checks, monthly reviews and yearly trends are on for all your devices.
+              </AppText>
+              <Button title="Manage subscription" kind="secondary" onPress={() => pro.manage()} style={{ marginTop: 16 }} />
+            </>
+          ) : (
+            <>
+              <AppText muted style={{ marginTop: 12 }}>
+                Up to {PRO_MONTHLY_SCANS} receipt scans a month, “Should I buy this?” against your budget, monthly reviews, yearly trends and CSV export.
+              </AppText>
+              <Button title="See Pro plans" onPress={() => router.push('/paywall')} style={{ marginTop: 16 }} />
+            </>
+          )}
         </>
       )}
 
       <Rule />
       <View style={styles.headRow}>
-        <SectionHeader index="03" title="About you" style={{ flex: 1 }} />
+        <SectionHeader index={num.you} title="About you" style={{ flex: 1 }} />
         {youNote}
       </View>
       <View style={{ marginTop: 16 }}>
@@ -249,7 +258,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
 
       <Rule />
       <View style={styles.headRow}>
-        <SectionHeader index="04" title="Your money" style={{ flex: 1 }} />
+        <SectionHeader index={num.money} title="Your money" style={{ flex: 1 }} />
         {moneyNote}
       </View>
       <AppText variant="caption" muted style={{ marginTop: 16 }}>
@@ -317,7 +326,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
       </View>
 
       <Rule />
-      <SectionHeader index="05" title="On this device" />
+      <SectionHeader index={num.device} title="On this device" />
       <View style={{ marginTop: 12 }}>
         {Platform.OS !== 'web' && (
           <ListRow
@@ -334,7 +343,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
       </View>
 
       <Rule />
-      <SectionHeader index="06" title="More" />
+      <SectionHeader index={num.more} title="More" />
       <View style={{ marginTop: 12 }}>
         <ListRow
           title="Export as CSV"
@@ -355,11 +364,13 @@ function SettingsForm({ settings }: { settings: Settings }) {
           <Rule />
           <SectionHeader title="Developer" />
           <View style={{ marginTop: 12 }}>
-            <ListRow
-              title="Simulate Pro"
-              subtitle="Development builds only"
-              right={<Switch value={settings.devPro} onValueChange={(on) => setSettings(db, { dev_pro: on })} label="Simulate Pro" />}
-            />
+            {PAYMENTS && (
+              <ListRow
+                title="Simulate Pro"
+                subtitle="Development builds only"
+                right={<Switch value={settings.devPro} onValueChange={(on) => setSettings(db, { dev_pro: on })} label="Simulate Pro" />}
+              />
+            )}
             <ListRow
               title="Load sample data"
               subtitle="About three months of a first job, living alone"
@@ -393,9 +404,11 @@ function SettingsForm({ settings }: { settings: Settings }) {
         <AppText style={{ marginTop: 14 }}>
           This deletes your account and everything in it from all your devices: entries, receipts, repeats, your savings goal and settings. It can’t be undone.
         </AppText>
-        <AppText variant="caption" muted style={{ marginTop: 12 }}>
-          If you subscribe to Pro, cancel it in the App Store too. Deleting your account doesn’t stop the subscription.
-        </AppText>
+        {PAYMENTS && (
+          <AppText variant="caption" muted style={{ marginTop: 12 }}>
+            If you subscribe to Pro, cancel it in the App Store too. Deleting your account doesn’t stop the subscription.
+          </AppText>
+        )}
         <Button title="Delete account" kind="danger" onPress={deleteAccount} loading={busy === 'delete'} style={{ marginTop: 24 }} />
         <Button title="Keep my account" kind="secondary" onPress={() => setDeleting(false)} style={{ marginTop: 10 }} />
       </Dialog>

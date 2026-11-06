@@ -30,8 +30,10 @@ const apiUrl = (extra.apiUrl ?? '').trim().replace(/\/+$/, '');
 if (/^https:\/\/[^/\s]+/.test(apiUrl)) ok(`AI server URL: ${apiUrl}`);
 else fail('expo.extra.apiUrl is not your AI server', 'Deploy the AI server (LAUNCH.md, step 3) and paste its https://… URL into app.json.');
 
+const payments = extra.payments === true;
 const rcKey = (extra.revenueCatIosKey ?? '').trim();
-if (/^appl_\w+$/.test(rcKey)) ok('RevenueCat iOS key');
+if (!payments) ok('Payments are off: every feature is free, and RevenueCat isn’t needed yet');
+else if (/^appl_\w+$/.test(rcKey)) ok('RevenueCat iOS key');
 else fail('expo.extra.revenueCatIosKey is missing (it starts with appl_)', 'RevenueCat → your project → API keys → copy the App Store public key into app.json.');
 
 for (const key of ['privacyUrl', 'termsUrl', 'supportUrl']) {
@@ -129,7 +131,15 @@ if (/^https:\/\//.test(apiUrl)) {
     else if (anthropic === 'missing') fail('The ANTHROPIC_API_KEY secret is missing', 'cd worker && npx wrangler secret put ANTHROPIC_API_KEY');
     else if (anthropic === 'invalid') fail('Anthropic rejected the ANTHROPIC_API_KEY secret', 'Create a key at console.anthropic.com → API keys, then: cd worker && npx wrangler secret put ANTHROPIC_API_KEY');
     else fail('The server couldn’t reach Anthropic', 'Try again in a minute (status: status.anthropic.com).');
-    if (revenuecat === 'ok') ok('RevenueCat accepted the secret key');
+    if (health.configured.payments !== undefined && health.configured.payments !== payments) {
+      fail(
+        `Payments are ${payments ? 'on' : 'off'} in app.json but ${health.configured.payments ? 'on' : 'off'} on the server`,
+        `Set PAYMENTS = "${payments ? 'on' : 'off'}" in worker/wrangler.toml and redeploy (cd worker && npx wrangler deploy), or change "payments" in app.json.`,
+      );
+    }
+    if (!payments || revenuecat === 'off') {
+      // Nothing to check until Pro is on sale.
+    } else if (revenuecat === 'ok') ok('RevenueCat accepted the secret key');
     else if (revenuecat === 'missing') fail('The REVENUECAT_SECRET_KEY secret is missing, so Pro subscribers would be refused AI', 'cd worker && npx wrangler secret put REVENUECAT_SECRET_KEY');
     else if (revenuecat === 'invalid') fail('RevenueCat rejected the REVENUECAT_SECRET_KEY secret', 'In RevenueCat → API keys, create a secret key with API version V1, then: cd worker && npx wrangler secret put REVENUECAT_SECRET_KEY');
     else fail('The server couldn’t reach RevenueCat', 'Try again in a minute (status: status.revenuecat.com).');

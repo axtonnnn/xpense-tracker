@@ -1,6 +1,6 @@
 # App Store listing
 
-Everything App Store Connect asks for, ready to paste. Replace `YOUR-SERVER` with your AI server's address (for example `xpense-ai.yourname.workers.dev`). `npm run store:check` confirms every field still fits Apple's limits after you edit it.
+Everything App Store Connect asks for, ready to paste. Xpense launches free (payments are off); the text for when you start selling Xpense Pro is at the end, under [When you turn on Xpense Pro](#when-you-turn-on-xpense-pro). Replace `YOUR-SERVER` with your AI server's address (for example `xpense-ai.yourname.workers.dev`). `npm run store:check` confirms every field still fits Apple's limits after you edit it.
 
 ## App information
 
@@ -61,21 +61,14 @@ PRIVATE
 • No ads, no tracking, and we never sell your data
 • Face ID lock, and delete your account any time in Settings
 
-FREE
+EVERYTHING INCLUDED
 • Expense and income tracking with history and search
-• Weekly and monthly charts of needs and wants
 • What's safe to spend, and need/want tagging
 • A savings goal, with a monthly check-in
-• Up to 3 repeating bills or paychecks
-• 3 free AI receipt scans
-
-XPENSE PRO
-• Up to 300 AI receipt and bill scans a month
-• "Should I buy this?" checks and a monthly AI review
-• 6-month and yearly trends, and spending by category
-• Unlimited repeating bills and paychecks, your own categories and CSV export
-
-Xpense Pro is an auto-renewing subscription: $2.99 a month, or $19.99 a year with a 1-week free trial. Prices are in US dollars and may vary by country. Payment is charged to your Apple ID account when you confirm the purchase. The subscription renews automatically unless you cancel at least 24 hours before the end of the current period, and your account is charged for the renewal within 24 hours before the period ends. Manage or cancel it any time in your App Store account settings.
+• AI receipt and bill scans, "Should I buy this?" checks and a monthly AI review
+• Weekly, monthly, 6-month and yearly trends, and spending by category
+• Repeating bills and paychecks, your own categories and CSV export
+AI features have fair monthly limits: up to 300 scans and 300 buy checks a month.
 
 Terms of Use: https://YOUR-SERVER/terms
 Privacy Policy: https://YOUR-SERVER/privacy
@@ -128,7 +121,6 @@ https://YOUR-SERVER/privacy
 | Contact Info → **Name** (first name, if given) | App Functionality | Yes | No |
 | Financial Info → **Other Financial Info** (entries, pay and goals kept in the account; totals sent for AI answers) | App Functionality | Yes | No |
 | Identifiers → **User ID** (the account ID) | App Functionality | Yes | No |
-| Purchases → **Purchase History** (through RevenueCat) | App Functionality | Yes | No |
 | Usage Data → **Other Usage Data** (how many AI requests an account made this month) | App Functionality | Yes | No |
 | Photos or Videos → **Photos** (receipt scans, sent to the AI and not kept) | App Functionality | No | No |
 
@@ -143,16 +135,46 @@ Nothing is used for tracking or advertising.
 ```text
 Sign-in: please use Sign in with Apple on the first screen. It creates an account in one step; Xpense has no passwords. (Sign-in with a 6-digit email code also works.)
 
-AI features: before anything is sent, the app asks for permission (guideline 5.1.2(i)). The permission screen lists exactly what goes to our AI service, says that it runs on an outside AI provider, and links to the privacy policy, which names that provider: Anthropic (Claude API). Every account gets 3 free scans; a photo that isn't a receipt or bill doesn't use one up. To test: AI mode > Take photo (or Choose from photos) > any receipt. Reading takes 10 to 60 seconds.
-
-Xpense Pro is an auto-renewable subscription (monthly, or yearly with a 1-week free trial). It can be bought with a sandbox account from any locked feature, for example Dashboard > "6 months", or from Settings > See Pro plans. Restore purchases is on the Pro screen and in Settings > More.
+AI features: before anything is sent, the app asks for permission (guideline 5.1.2(i)). The permission screen lists exactly what goes to our AI service, says that it runs on an outside AI provider, and links to the privacy policy, which names that provider: Anthropic (Claude API). All features are free, with monthly fair-use limits. To test: AI mode > Take photo (or Choose from photos) > any receipt. Reading takes 10 to 60 seconds. AI mode also has "Should I buy this?" and a monthly review.
 
 Account deletion (guideline 5.1.1(v)): Settings > Delete account deletes the account and all its data.
 
 Xpense runs on iPhone, iPad and Apple silicon Macs; on iPad and Mac the tabs become a sidebar.
 ```
 
-## In-app purchases (subscriptions)
+## When you turn on Xpense Pro
+
+Do this only when you start selling Pro (LAUNCH.md, "Turning on Xpense Pro"). Until then, leave it out of App Store Connect.
+
+**Description with Pro**: in the description above, replace the "EVERYTHING INCLUDED" block (down to the limits line) with this:
+
+```text
+FREE
+• Expense and income tracking with history and search
+• Weekly and monthly charts of needs and wants
+• What's safe to spend, and need/want tagging
+• A savings goal, with a monthly check-in
+• Up to 3 repeating bills or paychecks
+• 3 free AI receipt scans
+
+XPENSE PRO
+• Up to 300 AI receipt and bill scans a month
+• "Should I buy this?" checks and a monthly AI review
+• 6-month and yearly trends, and spending by category
+• Unlimited repeating bills and paychecks, your own categories and CSV export
+
+Xpense Pro is an auto-renewing subscription: $2.99 a month, or $19.99 a year with a 1-week free trial. Prices are in US dollars and may vary by country. Payment is charged to your Apple ID account when you confirm the purchase. The subscription renews automatically unless you cancel at least 24 hours before the end of the current period, and your account is charged for the renewal within 24 hours before the period ends. Manage or cancel it any time in your App Store account settings.
+```
+
+**App Privacy**: add Purchases → **Purchase History** (through RevenueCat), App Functionality, linked to the user, not used for tracking.
+
+**Review notes**: in the AI paragraph, replace "All features are free, with monthly fair-use limits." with "Every account gets 3 free scans." and add this paragraph:
+
+```text
+Xpense Pro is an auto-renewable subscription (monthly, or yearly with a 1-week free trial). It can be bought with a sandbox account from any locked feature, for example Dashboard > "6 months", or from Settings > See Pro plans. Restore purchases is on the Pro screen and in Settings > More.
+```
+
+### In-app purchases (subscriptions)
 
 Create one subscription group and two subscriptions in **Monetization → Subscriptions**.
 

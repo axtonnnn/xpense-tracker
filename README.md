@@ -23,6 +23,8 @@ A calm, structured budget for people who've just started earning (a first job, a
 | **AI monthly review** with a safety score and 3 tips | — | ✓ |
 | CSV export, your own categories | — | ✓ |
 
+**Payments are off for launch:** every account gets everything in the Pro column, within the fair-use limits, and the app shows nothing about Pro or prices. Selling Pro later is one setting in `app.json` and one in `worker/wrangler.toml`, plus the store setup in [LAUNCH.md](LAUNCH.md#turning-on-xpense-pro).
+
 - **Design:** "Gallery". Bone paper, white pages, black ink, square corners and numbered sections; Geist and Geist Mono for everything, Instrument Serif Italic only for the wordmark. Needs are solid ink, wants are hatched, bills still due are dotted, savings are stone, income is an open ring, so nothing relies on colour. Small, quick motion (numbers count up, bars fill, rows fade in, sheets rise) that turns into fades with Reduce Motion. Always light. See the [brand guide](docs/brand/README.md).
 - **Savings goal:** one goal at a time. The monthly set-aside is already kept out of what's safe to spend; money added beyond it comes out of this month, money taken out goes back in. At the start of each month the dashboard asks once whether last month's set-aside went in.
 - **Accounts:** Sign in with Apple or a 6-digit email code (Supabase). Signing in is required; each account has its own database on the device.
@@ -121,11 +123,13 @@ A heavy Pro user (60 scans a month) costs about **$0.10–0.50/month** in AI. Th
 | Where | Key | What |
 |---|---|---|
 | `app.json` → `extra` | `apiUrl` | Worker URL (`demo` = sample answers in dev builds) |
+| | `payments` | `false` while Xpense is free; `true` once Pro is on sale (with `PAYMENTS = "on"` on the server) |
 | | `supabaseUrl`, `supabaseKey` | Supabase project URL and **publishable** key (never the secret key) |
 | | `revenueCatIosKey`, `revenueCatAndroidKey` | RevenueCat public SDK keys |
 | | `privacyUrl`, `termsUrl`, `supportUrl` | Optional overrides. By default they are the AI server's `/privacy`, `/terms` and `/support` pages |
 | `src/lib/config.ts` | `FREE_TRIAL_SCANS`, `PRO_MONTHLY_SCANS` | The numbers the app's copy quotes. Keep them equal to the server's |
 | `worker/wrangler.toml` | `SUPABASE_URL` | The same project URL; sign-in tokens are checked against it |
+| | `PAYMENTS` | `"off"` while Xpense is free: every account gets every AI feature within the monthly caps, RevenueCat is unused and the pages leave out Pro. `"on"` once Pro is on sale |
 | | `OWNER_NAME`, `CONTACT_EMAIL`, `GOVERNING_LAW`, `LAST_UPDATED` | Filled into the policy and support pages |
 | | `APP_STORE_URL`, `PLAY_STORE_URL` | Optional. Download buttons on the website |
 | | `PRO_PRICES` | Pro's prices on the website's home page. Keep them the same as App Store Connect, or leave empty to hide them |

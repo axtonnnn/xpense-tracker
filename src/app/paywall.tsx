@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -9,7 +9,7 @@ import { Mark } from '@/components/marks';
 import { Appear, timing, useMotion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
 import { AppText, Button, haptic, IconButton, Notice, Screen, TextLink } from '@/components/ui';
-import { PRIVACY_URL, PRO_MONTHLY_SCANS, TERMS_URL } from '@/lib/config';
+import { PAYMENTS, PRIVACY_URL, PRO_MONTHLY_SCANS, TERMS_URL } from '@/lib/config';
 import { PREVIEW_PLANS } from '@/lib/preview-plans';
 import { usePro } from '@/lib/pro';
 import { colors, motion } from '@/theme/tokens';
@@ -69,7 +69,12 @@ const BENEFITS = [
   'CSV export and your own categories',
 ];
 
+/** The Pro screen, while payments are on; otherwise nothing links here and a stray visit goes home. */
 export default function Paywall() {
+  return PAYMENTS ? <PaywallScreen /> : <Redirect href="/" />;
+}
+
+function PaywallScreen() {
   const { feature } = useLocalSearchParams<{ feature?: string }>();
   const pro = usePro();
   const toast = useToast();

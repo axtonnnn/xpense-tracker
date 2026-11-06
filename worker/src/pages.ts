@@ -5,7 +5,7 @@
 import privacyPolicy from '../../docs/privacy-policy.md';
 import support from '../../docs/support.md';
 import terms from '../../docs/terms.md';
-import { monthlyCap, trialLimit } from './entitlement';
+import { monthlyCap, paymentsOn, trialLimit } from './entitlement';
 import type { Env } from './env';
 import { escapeHtml, renderMarkdown } from './markdown';
 
@@ -36,7 +36,18 @@ const setting = (env: Env, name: Setting) => {
 /** Names of the page settings that still need a value (reported by /health for `npm run preflight`). */
 export const missingSettings = (env: Env) => SETTINGS.filter((name) => !isSet(env[name]));
 
+/**
+ * Policy text that applies only while Pro is on sale sits between <!-- payments --> and <!-- /payments -->,
+ * and its free-only counterpart between <!-- free --> and <!-- /free -->. The other kind is dropped here; the
+ * markers themselves are comments, which the Markdown renderer removes.
+ */
+function forPayments(markdown: string, on: boolean): string {
+  const drop = on ? 'free' : 'payments';
+  return markdown.replace(new RegExp(`<!-- ${drop} -->[\\s\\S]*?<!-- /${drop} -->\\n?`, 'g'), '');
+}
+
 function fill(markdown: string, env: Env): string {
+  markdown = forPayments(markdown, paymentsOn(env));
   const email = setting(env, 'CONTACT_EMAIL');
   const values: Record<string, string> = {
     OWNER_NAME: setting(env, 'OWNER_NAME'),
@@ -222,7 +233,7 @@ function page(title: string, description: string, body: string, env: Env): strin
 <style>${STYLE}</style></head>
 <body><div class="wrap">
 <header class="top"><a class="brand" href="/" aria-label="Xpense home">${mark(26, 'hm')}<span class="word">xpense</span></a>
-<nav class="links" aria-label="Site"><a href="/#how">How it works</a><a href="/#pro">Pro</a><a href="/support">Support</a><a class="btn small" href="/#get">Get Xpense</a></nav></header>
+<nav class="links" aria-label="Site"><a href="/#how">How it works</a>${paymentsOn(env) ? '<a href="/#pro">Pro</a>' : ''}<a href="/support">Support</a><a class="btn small" href="/#get">Get Xpense</a></nav></header>
 ${body}
 <footer class="bottom"><span>Xpense · budgeting suggestions, not financial advice${owner}</span><nav aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></nav></footer>
 </div></body></html>`;
@@ -328,13 +339,13 @@ function home(env: Env): string {
   </div>
 </section>
 
-<section id="pro" aria-label="Free and Pro">
+${paymentsOn(env) ? `<section id="pro" aria-label="Free and Pro">
   <h2>Free, with Pro when you want it</h2>
   <div class="plans">
     <div class="plan"><h3>Free</h3><ul><li>Expenses, income, history and search</li><li>What’s safe to spend, and a savings goal</li><li>Weekly and monthly charts</li><li>Up to 3 repeating bills or paychecks</li><li>${trial} free AI receipt scans</li></ul></div>
     <div class="plan pro"><h3>${prices ? `Pro · ${escapeHtml(prices)}` : 'Xpense Pro'}</h3><ul><li>Up to ${scans} AI receipt scans a month</li><li>“Should I buy this?”, checked against your budget</li><li>A monthly review with three tips</li><li>Six-month and yearly trends</li><li>Unlimited repeats, CSV export, your own categories</li></ul></div>
   </div>
-</section>
+</section>` : ''}
 
 <section aria-label="Private by design">
   <div class="private">

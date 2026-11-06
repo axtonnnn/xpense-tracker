@@ -13,6 +13,7 @@ import { listBetween } from '@/db/transactions';
 import { reviewRequest } from '@/lib/ai-context';
 import { ApiError, monthlyReview, NeedsProError } from '@/lib/api';
 import { pctChange, totals } from '@/lib/budget';
+import { PAYMENTS } from '@/lib/config';
 import { addMonths, endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
 import { formatFigure } from '@/lib/money';
 import { useRequirePro } from '@/lib/pro';
@@ -49,7 +50,7 @@ export default function MonthReview() {
       setResult(answer);
     } catch (e) {
       haptic('warning');
-      if (e instanceof NeedsProError) requirePro('ai_review');
+      if (e instanceof NeedsProError && PAYMENTS) requirePro('ai_review');
       else setError(e instanceof ApiError || e instanceof Error ? e.message : 'Something went wrong. Please try again.');
     } finally {
       setBusy(false);

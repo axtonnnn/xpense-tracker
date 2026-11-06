@@ -47,7 +47,7 @@ function setup(
   opts: { pro?: boolean; rcStatus?: number; supabaseStatus?: number; ai?: Partial<AIProvider>; env?: Partial<Env>; keepaliveMs?: number } = {},
 ) {
   const kv = new MemoryKV();
-  const env: Env = { ANTHROPIC_API_KEY: 'test', REVENUECAT_SECRET_KEY: 'rc_secret', USAGE: kv, ...opts.env };
+  const env: Env = { ANTHROPIC_API_KEY: 'test', REVENUECAT_SECRET_KEY: 'rc_secret', PAYMENTS: 'on', USAGE: kv, ...opts.env };
   const ai: AIProvider = {
     scanReceipt: vi.fn(async () => receipt),
     checkPurchase: vi.fn(async () => ({ necessity: 'want' as const, verdict: 'wait' as const, reason: 'Nice to have.', cheaper_alternative: null, questions: [] })),
@@ -81,6 +81,7 @@ const read = async (res: Response): Promise<any> => res.json();
 
 const scanBody = { image_base64: 'a'.repeat(200), media_type: 'image/jpeg', currency: 'USD', locale: 'en-US', today: '2026-10-23' };
 const checkBody = { item: 'Headphones', price: 199, currency: 'USD' };
+const reviewBody = { month: '2026-10', currency: 'USD', income: 1, spent: 1, need: 1, want: 0, savings_goal: 0, previous: null, categories: [] };
 
 describe('request validation', () => {
   it('rejects requests without a valid sign-in', async () => {
@@ -223,6 +224,41 @@ describe('Pro', () => {
     const res = await handle(post('/v1/scan', scanBody), env);
     expect(res.status).toBe(503);
     expect((await read(res)).error.code).toBe('store_unavailable');
+  });
+});
+
+describe('payments off', () => {
+  const off = { PAYMENTS: 'off', REVENUECAT_SECRET_KEY: undefined };
+
+  it('gives every account scans past the trial, buy checks and reviews, without asking RevenueCat', async () => {
+    const { handle, env, ai, fetchImpl } = setup({ env: off });
+    for (let i = 0; i < 5; i++) {
+      const res = await handle(post('/v1/scan', scanBody), env);
+      expect(res.status).toBe(200);
+      expect((await read(res)).trial_remaining).toBeNull();
+    }
+    expect((await handle(post('/v1/check', checkBody), env)).status).toBe(200);
+    expect((await handle(post('/v1/review', reviewBody), env)).status).toBe(200);
+    expect(ai.monthlyReview).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('is the default, and still applies the monthly limit', async () => {
+    const { handle, env, kv } = setup({ env: { PAYMENTS: undefined, PRO_MONTHLY_CHECKS: '1' } });
+    expect((await handle(post('/v1/check', checkBody), env)).status).toBe(200);
+    expect((await handle(post('/v1/check', checkBody), env)).status).toBe(429);
+    expect([...kv.store.keys()].some((k) => k.startsWith('trial:'))).toBe(false);
+  });
+
+  it('reports payments off on /health and skips the RevenueCat key check', async () => {
+    const { handle, env, fetchImpl } = setup({ env: off });
+    const deep = (await (await handle(new Request('https://xpense.example/health?deep=1'), env)).json()) as {
+      configured: { payments: boolean };
+      keys: { revenuecat: string };
+    };
+    expect(deep.configured.payments).toBe(false);
+    expect(deep.keys.revenuecat).toBe('off');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 

@@ -78,6 +78,7 @@
       "reactCompiler": true
     },
     "extra": {
+      "payments": false,
       "apiUrl": "",
       "supabaseUrl": "",
       "supabaseKey": "",

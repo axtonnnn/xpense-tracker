@@ -6,7 +6,7 @@ import type { z } from 'zod';
 import { CheckRequestSchema, ReviewRequestSchema, ScanRequestSchema } from '../../shared/schemas';
 import { AIError, createClaude, type AIProvider } from './ai/claude';
 import { checkSupabaseKey, deleteSupabaseUser, userFrom, verifySupabaseToken, type Verify } from './auth';
-import { checkAccess, checkRevenueCatKey, forgetAccount, recordUsage, trialLimit, type Feature } from './entitlement';
+import { checkAccess, checkRevenueCatKey, forgetAccount, paymentsOn, recordUsage, trialLimit, type Feature } from './entitlement';
 import type { Env } from './env';
 import { missingSettings, pageResponse } from './pages';
 
@@ -101,6 +101,7 @@ export function createHandler(deps: Deps) {
       const health = {
         ok: true,
         configured: {
+          payments: paymentsOn(env),
           anthropic_key: !!env.ANTHROPIC_API_KEY,
           revenuecat_key: !!env.REVENUECAT_SECRET_KEY,
           supabase_url: /^https:\/\//.test(env.SUPABASE_URL ?? ''),
@@ -115,7 +116,7 @@ export function createHandler(deps: Deps) {
       }
       const [anthropic, revenuecat, supabase] = await Promise.all([
         env.ANTHROPIC_API_KEY ? deps.ai(env).checkKey() : 'missing',
-        checkRevenueCatKey(env, fetchImpl),
+        paymentsOn(env) ? checkRevenueCatKey(env, fetchImpl) : Promise.resolve('off' as const),
         checkSupabaseKey(env, fetchImpl),
       ]);
       return json({ ...health, keys: { anthropic, revenuecat, supabase } });
