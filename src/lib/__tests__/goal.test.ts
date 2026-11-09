@@ -87,6 +87,13 @@ describe('when the goal is reached', () => {
     expect(arrivalMonth({ today: '2026-11-01', target: 120000, saved: 0, setAside: 30000, depositedThisMonth: 0 })).toBe('2027-02-01');
   });
 
+  it('does not count money already put in this month twice', () => {
+    const deposits = [dep('2026-09-10', 60000), dep('2026-10-05', 30000)];
+    const thisMonth = movesBetween(deposits, '2026-10-01', '2026-10-31').deposits;
+    // $900 saved, October's $300 already in, $1,000 to reach: that takes November's set-aside, not October's.
+    expect(arrivalMonth({ today: '2026-10-25', target: 100000, saved: savedTotal(deposits), setAside: 30000, depositedThisMonth: thisMonth })).toBe('2026-11-01');
+  });
+
   it('is this month once saved, and unknown with nothing set aside', () => {
     expect(arrivalMonth({ today: '2026-10-25', target: 1000, saved: 1000, setAside: 0, depositedThisMonth: 0 })).toBe('2026-10-01');
     expect(arrivalMonth({ today: '2026-10-25', target: 120000, saved: 0, setAside: 0, depositedThisMonth: 0 })).toBeNull();
