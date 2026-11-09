@@ -54,8 +54,13 @@ export async function deleteSupabaseUser(env: Env, userId: string, fetchImpl: ty
   if (!base || !key) return false;
   const headers: Record<string, string> = { apikey: key, 'Content-Type': 'application/json' };
   if (!key.startsWith('sb_')) headers.Authorization = `Bearer ${key}`;
-  const res = await fetchImpl(`${base}/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE', headers });
-  return res.ok || res.status === 404;
+  try {
+    const res = await fetchImpl(`${base}/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE', headers });
+    return res.ok || res.status === 404;
+  } catch (e) {
+    console.error('[account] Supabase unreachable', e);
+    return false;
+  }
 }
 
 /** For /health?deep=1: does Supabase accept the secret key? Lists at most one user. */

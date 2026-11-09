@@ -44,7 +44,7 @@ class MemoryKV implements KV {
 }
 
 function setup(
-  opts: { pro?: boolean; rcStatus?: number; supabaseStatus?: number; ai?: Partial<AIProvider>; env?: Partial<Env>; keepaliveMs?: number } = {},
+  opts: { pro?: boolean; rcStatus?: number; rcDown?: boolean; supabaseStatus?: number; supabaseDown?: boolean; ai?: Partial<AIProvider>; env?: Partial<Env>; keepaliveMs?: number } = {},
 ) {
   const kv = new MemoryKV();
   const env: Env = { ANTHROPIC_API_KEY: 'test', REVENUECAT_SECRET_KEY: 'rc_secret', PAYMENTS: 'on', USAGE: kv, ...opts.env };
@@ -56,7 +56,11 @@ function setup(
     ...opts.ai,
   };
   const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.includes('supabase.co')) return new Response('{}', { status: opts.supabaseStatus ?? 200 });
+    if (url.includes('supabase.co')) {
+      if (opts.supabaseDown) throw new TypeError('Network connection lost.');
+      return new Response('{}', { status: opts.supabaseStatus ?? 200 });
+    }
+    if (opts.rcDown) throw new TypeError('Network connection lost.');
     if (opts.rcStatus && opts.rcStatus !== 200) return new Response('{}', { status: opts.rcStatus });
     if (init?.method === 'DELETE') return Response.json({ app_user_id: USER });
     const entitlements = opts.pro ? { pro: { expires_date: '2027-01-01T00:00:00Z' } } : {};
@@ -369,5 +373,32 @@ describe('account deletion', () => {
     const res = await handle(post('/v1/account/delete', {}), env);
     expect(res.status).toBe(503);
     expect(kv.store.get(`trial:${USER}`)).toBe('2');
+  });
+
+  it('keeps everything and says so when Supabase cannot be reached', async () => {
+    const { handle, env, kv } = setup({ env: supabaseEnv, supabaseDown: true });
+    kv.store.set(`trial:${USER}`, '2');
+    const res = await handle(post('/v1/account/delete', {}), env);
+    expect(res.status).toBe(503);
+    expect((await read(res)).error).toMatchObject({ code: 'delete_failed' });
+    expect(kv.store.get(`trial:${USER}`)).toBe('2');
+  });
+
+  it('still reports success and clears the counters when RevenueCat cannot be reached', async () => {
+    const { handle, env, kv } = setup({ env: supabaseEnv, rcDown: true });
+    kv.store.set(`trial:${USER}`, '2');
+    const res = await handle(post('/v1/account/delete', {}), env);
+    expect(res.status).toBe(200);
+    expect(await read(res)).toEqual({ deleted: true });
+    expect(kv.store.has(`trial:${USER}`)).toBe(false);
+  });
+
+  it('still reports success and removes the RevenueCat customer when the counters cannot be cleared', async () => {
+    const { handle, env, kv, fetchImpl } = setup({ env: supabaseEnv });
+    kv.list = async () => Promise.reject(new Error('KV is down'));
+    const res = await handle(post('/v1/account/delete', {}), env);
+    expect(res.status).toBe(200);
+    expect(await read(res)).toEqual({ deleted: true });
+    expect(fetchImpl).toHaveBeenCalledWith(`https://api.revenuecat.com/v1/subscribers/${USER}`, expect.objectContaining({ method: 'DELETE' }));
   });
 });
