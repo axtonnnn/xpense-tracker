@@ -227,6 +227,38 @@ describe('Pro', () => {
   });
 });
 
+describe('limit settings', () => {
+  it('falls back to 3 free scans when FREE_TRIAL_SCANS is not a number', async () => {
+    for (const bad of ['three', '', '-1', '2.5']) {
+      const { handle, env, kv } = setup({ env: { FREE_TRIAL_SCANS: bad } });
+      kv.store.set(`trial:${USER}`, '3');
+      const res = await handle(post('/v1/scan', scanBody), env);
+      expect(res.status).toBe(402);
+      expect((await read(res)).error.code).toBe('trial_used');
+    }
+  });
+
+  it('honours FREE_TRIAL_SCANS = "0" (no free scans)', async () => {
+    const { handle, env } = setup({ env: { FREE_TRIAL_SCANS: '0' } });
+    expect((await handle(post('/v1/scan', scanBody), env)).status).toBe(402);
+  });
+
+  it('keeps the default Pro cap when a PRO_MONTHLY_* setting is blank or not a number', async () => {
+    for (const bad of ['', 'lots']) {
+      const { handle, env } = setup({ pro: true, env: { PRO_MONTHLY_CHECKS: bad } });
+      const res = await handle(post('/v1/check', checkBody), env);
+      expect(res.status).toBe(200);
+      expect((await read(res)).result.verdict).toBe('wait');
+    }
+  });
+
+  it('accepts a padded number', async () => {
+    const { handle, env, kv } = setup({ pro: true, env: { PRO_MONTHLY_SCANS: ' 2 ' } });
+    kv.store.set(`usage:${USER}:2026-10:scan`, '2');
+    expect((await handle(post('/v1/scan', scanBody), env)).status).toBe(429);
+  });
+});
+
 describe('usage counters', () => {
   it('still answers when the counter can’t be written (free plan daily write limit)', async () => {
     const { handle, env, kv } = setup({ env: { PAYMENTS: 'off' } });
