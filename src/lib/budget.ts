@@ -188,7 +188,8 @@ export function safeToSpend(input: {
   let status: SafeStatus;
   if (income <= 0) status = 'unset';
   else if (amount < 0) status = 'over';
-  else if (amount < budget * 0.2) status = 'tight';
+  // Nothing left is never "on track", even when the whole month's budget went to savings (budget ≤ 0).
+  else if (amount === 0 || amount < budget * 0.2) status = 'tight';
   else status = 'safe';
   return {
     amount,
