@@ -131,6 +131,20 @@ describe('safeToSpend', () => {
     expect(over.perDay).toBe(0);
   });
 
+  it('never calls nothing left "safe", even when the whole budget went to savings', () => {
+    const base = { today: '2026-10-23', txs: [], expectedIncomeCents: 200000, recurring: [] };
+    // Everything is set aside each month.
+    const allSetAside = safeToSpend({ ...base, savingsGoalCents: 200000 });
+    expect(allSetAside.amount).toBe(0);
+    expect(allSetAside.status).toBe('tight');
+    // The rest of the pay went into the goal on top of the set-aside.
+    const extraSaved = safeToSpend({ ...base, savingsGoalCents: 50000, savingsMoves: { deposits: 200000, withdrawals: 0 } });
+    expect(extraSaved.amount).toBe(0);
+    expect(extraSaved.status).toBe('tight');
+    // A little left of a normal budget is still tight, as before.
+    expect(safeToSpend({ ...base, savingsGoalCents: 0, txs: [exp('2026-10-01', 190000, 0)] }).status).toBe('tight');
+  });
+
   it('counts paychecks still due this month, like the bills', () => {
     const pay = { ...rent, id: 'p', type: 'income' as const, amount_cents: 200000, anchor_on: '2026-10-15', next_on: '2026-10-30' };
     const s = safeToSpend({ today: '2026-10-23', txs: [inc('2026-10-15', 200000)], expectedIncomeCents: 0, savingsGoalCents: 0, recurring: [rent, pay] });
