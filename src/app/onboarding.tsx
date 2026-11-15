@@ -95,6 +95,10 @@ export default function Onboarding() {
         haptic('warning');
         return setError('Write your pay as a number, or leave it empty for now.');
       }
+      if (setAsideCents !== null && setAsideCents < 0) {
+        haptic('warning');
+        return setError('Write what you’ll set aside as zero or more, or leave it empty for now.');
+      }
       if (setAsideCents !== null && monthlyCents !== null && setAsideCents > monthlyCents) {
         haptic('warning');
         return setError('That’s more than you earn in a month.');

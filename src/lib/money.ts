@@ -28,6 +28,17 @@ export function parseAmount(input: string): number | null {
   return toCents(n);
 }
 
+/**
+ * For optional money settings (pay, set-aside, already saved): blank means 0, a number of zero or more is
+ * its cents, and anything else — a typo or a negative amount — is null so the caller can say so instead of
+ * quietly saving 0 or a minus figure.
+ */
+export function parseOptionalAmount(input: string): number | null {
+  if (!input.trim()) return 0;
+  const cents = parseAmount(input);
+  return cents === null || cents < 0 ? null : cents;
+}
+
 const formatters = new Map<string, Intl.NumberFormat>();
 
 function formatter(currency: string, compact: boolean): Intl.NumberFormat {

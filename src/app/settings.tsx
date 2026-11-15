@@ -10,7 +10,7 @@ import { Appear } from '@/components/motion';
 import { Dialog, useConfirm } from '@/components/Sheet';
 import { sinceText } from '@/components/TabBar';
 import { useToast } from '@/components/Toast';
-import { AppText, Avatar, Button, Chip, Field, ListRow, PageTitle, ProTag, Rule, Screen, SectionHeader, Switch, TextLink, TopBar } from '@/components/ui';
+import { AppText, Avatar, Button, Chip, Field, haptic, ListRow, PageTitle, ProTag, Rule, Screen, SectionHeader, Switch, TextLink, TopBar } from '@/components/ui';
 import { useActiveGoal } from '@/db/goals';
 import { setSettings, useSettings, type Settings } from '@/db/settings';
 import { useSync } from '@/db/SyncProvider';
@@ -20,7 +20,7 @@ import { useAuth, useUser } from '@/lib/auth';
 import { PAYMENTS, PRIVACY_URL, PRO_MONTHLY_SCANS, SUPPORT_URL, TERMS_URL } from '@/lib/config';
 import { today } from '@/lib/dates';
 import { shareCSV } from '@/lib/export';
-import { centsToInput, CURRENCIES, currencySymbol, formatMoney, parseAmount } from '@/lib/money';
+import { centsToInput, CURRENCIES, currencySymbol, formatMoney, parseOptionalAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { loadSampleData } from '@/lib/sample-data';
 import { colors } from '@/theme/tokens';
@@ -102,6 +102,19 @@ function SettingsForm({ settings }: { settings: Settings }) {
   const saveMoney = async (patch: Parameters<typeof setSettings>[1]) => {
     await setSettings(db, patch);
     moneySaved();
+  };
+
+  // A typo or a minus amount is not saved as 0: the field says so and the saved figure stays.
+  const [incomeError, setIncomeError] = useState<string | null>(null);
+  const [setAsideError, setSetAsideError] = useState<string | null>(null);
+  const saveAmount = (text: string, key: 'monthly_income_cents' | 'savings_goal_cents', setFieldError: (e: string | null) => void) => {
+    const cents = parseOptionalAmount(text);
+    if (cents === null) {
+      haptic('warning');
+      return setFieldError('Write an amount of zero or more, or leave it empty. Nothing was changed.');
+    }
+    setFieldError(null);
+    saveMoney({ [key]: cents });
   };
 
   const pickCurrency = (code: string) => {
@@ -290,7 +303,8 @@ function SettingsForm({ settings }: { settings: Settings }) {
           prefix={symbol}
           value={income}
           onChangeText={setIncome}
-          onBlur={() => saveMoney({ monthly_income_cents: parseAmount(income) ?? 0 })}
+          onBlur={() => saveAmount(income, 'monthly_income_cents', setIncomeError)}
+          error={incomeError}
           keyboardType="decimal-pad"
           inputMode="decimal"
           placeholder="0"
@@ -303,7 +317,8 @@ function SettingsForm({ settings }: { settings: Settings }) {
           prefix={symbol}
           value={setAside}
           onChangeText={setSetAside}
-          onBlur={() => saveMoney({ savings_goal_cents: parseAmount(setAside) ?? 0 })}
+          onBlur={() => saveAmount(setAside, 'savings_goal_cents', setSetAsideError)}
+          error={setAsideError}
           keyboardType="decimal-pad"
           inputMode="decimal"
           placeholder="0"
