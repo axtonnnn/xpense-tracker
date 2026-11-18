@@ -85,8 +85,10 @@ export default function ScanReview() {
           category: draft.category,
           necessity: draft.necessity,
           cadence: 'monthly',
-          // This bill is already saved; start repeating from next month's due date.
+          // This bill is already saved; start repeating from next month's due date, kept on the same day of
+          // the month (a bill due on the 31st repeats on Feb 28, then Mar 31, not on the 28th for good).
           startOn: addMonths(draft.dueDate ?? draft.date, 1),
+          anchorOn: draft.dueDate ?? draft.date,
         });
         await applyDueRecurring(db, today(), currency);
       }
