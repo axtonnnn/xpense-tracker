@@ -233,14 +233,33 @@ const PAGE = 1000;
 export function supabaseRemote(client: SupabaseClient, userId: string): Remote {
   return {
     async pull(since) {
+      // Pages pick up from the last server time seen, not from a row count. A record another device
+      // changes mid-pull jumps to the end of the list, and counting rows would then skip the one that
+      // slid into its place (for good, on a first sync). Each page starts at the previous page's last
+      // time (inclusive, so records sharing that time aren't lost) and repeats are dropped.
       const out: RemoteRecord[] = [];
-      for (let from = 0; ; from += PAGE) {
+      const seen = new Set<string>();
+      let after = since;
+      let inclusive = false;
+      for (;;) {
         let q = client.from('records').select('kind, id, data, deleted, updated_at, synced_at').eq('user_id', userId);
-        if (since) q = q.gt('synced_at', since);
-        const { data, error } = await q.order('synced_at', { ascending: true }).range(from, from + PAGE - 1);
+        if (after) q = inclusive ? q.gte('synced_at', after) : q.gt('synced_at', after);
+        const { data, error } = await q.order('synced_at', { ascending: true }).limit(PAGE);
         if (error) throw new Error(error.message);
-        out.push(...((data ?? []) as RemoteRecord[]));
-        if (!data || data.length < PAGE) return out;
+        const page = (data ?? []) as RemoteRecord[];
+        let fresh = 0;
+        for (const r of page) {
+          const key = `${r.kind}\u0000${r.id}\u0000${r.synced_at}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(r);
+          fresh++;
+        }
+        // A short page is the end. A page of nothing new (a whole page sharing one server time, which
+        // clock_timestamp() makes all but impossible) stops rather than asking forever.
+        if (page.length < PAGE || fresh === 0 || !page[page.length - 1].synced_at) return out;
+        after = page[page.length - 1].synced_at!;
+        inclusive = true;
       }
     },
     async push(records) {
