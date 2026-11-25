@@ -13,7 +13,7 @@ import { AmountField, AppText, Button, Chip, Field, haptic, SectionHeader, TextL
 import { addDeposit, deleteDeposit, type Goal, type GoalState } from '@/db/goals';
 import { setSettings } from '@/db/settings';
 import { endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
-import { arrivalMonth, extraFor, movesBetween, monthName, type Checkin } from '@/lib/goal';
+import { arrivalMonth, extraFor, goalPercent, movesBetween, monthName, shownSaved, type Checkin } from '@/lib/goal';
 import { currencySymbol, formatMoney, parseAmount } from '@/lib/money';
 import { colors, useWide } from '@/theme/tokens';
 
@@ -63,7 +63,7 @@ export function GoalSummary({
 }) {
   const wide = useWide();
   const { goal, saved } = state;
-  const pct = Math.round(Math.min(1, saved / Math.max(1, goal.target_cents)) * 100);
+  const pct = goalPercent(saved, goal.target_cents);
   return (
     <View>
       <SectionHeader index={index} title={`Saving for ${goalWords(goal.name).saving}`} action={{ label: 'Add money', onPress: onAdd }} />
@@ -73,7 +73,7 @@ export function GoalSummary({
         accessibilityLabel={`${formatMoney(saved, currency)} saved of ${formatMoney(goal.target_cents, currency)}, ${pct}%. Open the goal`}
         style={({ pressed }) => ({ marginTop: 16, opacity: pressed ? 0.6 : 1 })}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-          <CountUp variant="headline" cents={saved} format={(c) => formatMoney(c, currency, { compact: true })} />
+          <CountUp variant="headline" cents={shownSaved(saved, goal.target_cents)} format={(c) => formatMoney(c, currency, { compact: true })} />
           <AppText muted>of {formatMoney(goal.target_cents, currency, { compact: true })}</AppText>
           <AppText variant="monoSmall" style={{ marginLeft: 'auto' }}>
             {pct}%

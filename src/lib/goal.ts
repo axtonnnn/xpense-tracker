@@ -56,6 +56,30 @@ export function progress(saved: number, target: number): number {
 }
 
 /**
+ * Whole percent saved, for display. Rounded down, so it never says 100% while anything is still left to save
+ * (99.6% of the way is "99%", not "100%").
+ */
+export function goalPercent(saved: number, target: number): number {
+  if (target > 0 && saved >= target) return 100;
+  return Math.floor(progress(saved, target) * 100);
+}
+
+// Goal amounts are shown without cents (formatMoney's compact form), which rounds to the nearest whole unit.
+// Near the end that reads as "$100 of $100" with $0.40 still to go, so round each figure the safe way.
+const UNIT = 100;
+
+/** Saved so far, as shown next to the target: rounded down to a whole unit until the goal is reached. */
+export function shownSaved(saved: number, target: number): number {
+  if (saved >= target) return saved;
+  return Math.max(0, Math.floor(saved / UNIT) * UNIT);
+}
+
+/** What's left to save, rounded up to a whole unit, so anything left never shows as nothing. */
+export function shownLeft(saved: number, target: number): number {
+  return Math.max(0, Math.ceil((target - saved) / UNIT) * UNIT);
+}
+
+/**
  * The month the goal is reached at the monthly set-aside, as its first day ("2027-01-01"), or null when
  * nothing is set aside each month. Whatever of this month's set-aside hasn't gone in yet still counts.
  */

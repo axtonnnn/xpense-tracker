@@ -12,7 +12,7 @@ import { AppText, Button, EmptyState, Rule, Screen, SectionHeader, TextLink, Top
 import { deleteDeposit, finishGoal, useActiveGoal, type GoalDeposit } from '@/db/goals';
 import { useSettings } from '@/db/settings';
 import { endOfMonth, formatDay, startOfMonth, today } from '@/lib/dates';
-import { arrivalMonth, monthName, monthsBetween, movesBetween } from '@/lib/goal';
+import { arrivalMonth, monthName, monthsBetween, movesBetween, shownLeft, shownSaved } from '@/lib/goal';
 import { formatFigure, formatMoney } from '@/lib/money';
 
 /** The savings goal: its own screen on phones, a sidebar page on iPad and Mac (`embedded`). */
@@ -87,7 +87,7 @@ export default function GoalView({ embedded }: { embedded?: boolean }) {
           {goal.name.charAt(0).toUpperCase() + goal.name.slice(1)}
         </AppText>
         <View style={styles.amountRow}>
-          <CountUp variant="hero" cents={saved} format={(c) => formatMoney(c, currency, { compact: true })} />
+          <CountUp variant="hero" cents={shownSaved(saved, goal.target_cents)} format={(c) => formatMoney(c, currency, { compact: true })} />
           {!reached && <AppText muted style={{ fontSize: 17 }}>of {formatMoney(goal.target_cents, currency, { compact: true })}</AppText>}
         </View>
       </Appear>
@@ -126,7 +126,7 @@ export default function GoalView({ embedded }: { embedded?: boolean }) {
       ) : (
         <>
           <Appear delay={120} style={styles.grid}>
-            <Figure label="Left to save" value={formatMoney(goal.target_cents - saved, currency, { compact: true })} />
+            <Figure label="Left to save" value={formatMoney(shownLeft(saved, goal.target_cents), currency, { compact: true })} />
             <Figure label="Set aside a month" value={setAside > 0 ? formatMoney(setAside, currency, { compact: true }) : '—'} />
             <Figure label="You’ll get there" value={arrival ? monthName(arrival, t) : '—'} />
             <Figure label="Started" value={formatDay(goal.started_on, { day: 'numeric', month: 'short' })} />
