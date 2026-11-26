@@ -13,7 +13,12 @@ Xpense helps you record income and expenses, see your progress, and separate nee
 
 ## 2. AI features
 
+<!-- noai -->
+This version of Xpense has no AI features.
+<!-- /noai -->
+<!-- ai -->
 AI features (receipt and bill scanning, "Should I buy this?", monthly review) produce automated suggestions that **may be inaccurate or incomplete**. Check amounts, dates and categories before saving. AI features run only with your permission. Our [Privacy Policy](privacy-policy.md) explains how they work.
+<!-- /ai -->
 
 <!-- payments -->
 ## 3. Xpense Pro subscription
@@ -29,22 +34,24 @@ AI features (receipt and bill scanning, "Should I buy this?", monthly review) pr
 ## 3. Price and limits
 
 - Xpense is free. If paid features are added later, these terms will be updated first, and you will only pay if you choose to buy them.
+<!-- ai -->
 - AI features include fair-use limits to keep the service sustainable: {{PRO_MONTHLY_SCANS}} receipt scans, {{PRO_MONTHLY_CHECKS}} purchase checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month. Limits reset on the 1st.
+<!-- /ai -->
 <!-- /free -->
 
 ## 4. Acceptable use
 
-Don't misuse the service. For example, don't try to get around usage limits or subscription checks, overload or reverse-engineer the AI service, or upload content you have no right to use.
+Don't misuse the service. For example, don't try to get around usage limits or subscription checks, overload or reverse-engineer the service, or upload content you have no right to use.
 
 ## 5. Your account and your data
 
 You need an account to use Xpense: sign in with Apple or with a code sent to your email. Keep access to that Apple ID or email address, because it is how you get back into your account. One account is for one person.
 
-Your entries sync between the devices you sign in on. Receipt photos stay on the device that took them. Use **Export as CSV**<!-- payments --> (Pro)<!-- /payments --> if you want your own copy. **Settings → Delete account** deletes your account and its data permanently; it can't be undone.
+Your entries sync between the devices you sign in on.<!-- ai --> Receipt photos stay on the device that took them.<!-- /ai --> Use **Export as CSV**<!-- payments --> (Pro)<!-- /payments --> if you want your own copy. **Settings → Delete account** deletes your account and its data permanently; it can't be undone.
 
 ## 6. Availability and changes
 
-We work to keep Xpense available, but features (including AI features that depend on third-party providers) may change, be interrupted or be discontinued. We may update these terms. If you keep using Xpense after an update, you accept the new terms.
+We work to keep Xpense available, but features<!-- ai --> (including AI features that depend on third-party providers)<!-- /ai --> may change, be interrupted or be discontinued. We may update these terms. If you keep using Xpense after an update, you accept the new terms.
 
 ## 7. Disclaimer and limitation of liability
 

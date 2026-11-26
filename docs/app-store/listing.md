@@ -2,6 +2,82 @@
 
 Everything App Store Connect asks for, ready to paste. Xpense launches free (payments are off); the text for when you start selling Xpense Pro is at the end, under [When you turn on Xpense Pro](#when-you-turn-on-xpense-pro). Replace `YOUR-SERVER` with your AI server's address (for example `xpense-ai.yourname.workers.dev`). `npm run store:check` confirms every field still fits Apple's limits after you edit it.
 
+## First release: AI off
+
+Xpense's first release ships without the AI (`"ai": false` in `app.json`, `AI = "off"` in `worker/wrangler.toml`), so it needs no Anthropic key. For this release, use the text in this section **in place of** the matching fields below; everything not listed here is used as written below. The screenshots in `docs/app-store/screenshots/` already match (four iPhone, two iPad, no AI mode).
+
+**Name**
+
+```text
+Xpense: Needs vs Wants Budget
+```
+
+Alternatives: `Xpense – Needs vs Wants`, `Xpense: First Paycheck Budget`.
+
+**Promotional text**
+
+```text
+Your first paycheck, your first rent, your first real budget. See what's safe to spend, and keep money for what you need.
+```
+
+**Description**
+
+```text
+Xpense is a simple budget for people who've just started earning: a first job, a part-time job next to school, or saving up for something big. It helps you spend on what you need, not on what you want, without a spreadsheet.
+
+WRITE IT DOWN IN A FEW TAPS
+Type the amount and the shop. Xpense guesses the category from the name and sorts it into a need or a want. Change anything with a tap, and save.
+
+KNOW WHAT'S SAFE TO SPEND
+After rent, bills still due and your savings goal, Xpense shows what's left to spend this month, and about how much that is per day. Paid weekly or monthly, it works either way.
+
+SAVE UP FOR WHAT YOU REALLY WANT
+A laptop, a car, moving out: set a goal and what you can put aside each month. Xpense keeps that money out of what's safe to spend, shows how close you are, and tells you when you'll get there.
+
+CALM AND CLEAR
+No colour-coded guilt. Needs are solid ink, wants are hatched, and your month reads at a glance, like a well-kept plan.
+
+ON ALL YOUR DEVICES
+Sign in with Apple, and your budget is the same on your iPhone, iPad and Mac.
+
+PRIVATE
+• Your budget is private to your account; no bank login
+• No ads, no tracking, and we never sell your data
+• Face ID lock, and delete your account any time in Settings
+
+EVERYTHING INCLUDED, FREE
+• Expense and income tracking with history and search
+• What's safe to spend, and need/want tagging
+• A savings goal, with a monthly check-in
+• Weekly, monthly, 6-month and yearly trends, and spending by category
+• Repeating bills and paychecks, your own categories and CSV export
+
+Terms of Use: https://YOUR-SERVER/terms
+Privacy Policy: https://YOUR-SERVER/privacy
+
+Xpense gives budgeting suggestions, not financial advice.
+```
+
+**Keywords**
+
+```text
+expense,tracker,money,savings,first job,paycheck,student,bills,saving,spending,planner,rent,goal
+```
+
+**App Privacy**: the same table as below, but leave out the **Other Usage Data** and **Photos** rows, and for **Other Financial Info** use "entries, pay and goals kept in the account".
+
+**Review notes**
+
+```text
+Sign-in: please use Sign in with Apple on the first screen. It creates an account in one step; Xpense has no passwords.
+
+To try it: finish the two setup pages, then add an expense in Tracker and see it on the Dashboard and in History. Everything is free; there are no purchases.
+
+Account deletion (guideline 5.1.1(v)): Settings > Delete account deletes the account and all its data.
+
+Xpense runs on iPhone, iPad and Apple silicon Macs; on iPad and Mac the tabs become a sidebar.
+```
+
 ## App information
 
 **Name** (30 characters max). Names are unique across the App Store; if this one is taken, try the alternatives.

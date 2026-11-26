@@ -9,7 +9,7 @@ The app, the AI server and the App Store listing are ready. What's left are the 
 | | Cost |
 |---|---|
 | Apple Developer Program | $99 a year |
-| Anthropic API (the AI, for everyone while Xpense is free) | pay as you go, about $0.002–0.008 per receipt scan; your monthly spend limit caps it |
+| Anthropic API (the AI) | nothing for the first release: the AI is off. Later, pay as you go, about $0.002–0.008 per receipt scan |
 | Supabase (accounts and sync), Cloudflare Workers (the AI server and the privacy and support pages), Expo EAS (builds) | free plans are enough to launch |
 
 Only if you need them later: Cloudflare Workers Paid ($5 a month) if the server outgrows the free plan (see [If something goes wrong](#if-something-goes-wrong)), and a domain (about $10 a year) if you turn on email sign-in.
@@ -45,6 +45,9 @@ Start here: approval can take a day or two, and you can do steps 2 to 5 while yo
   - Enrolling as an **organization** needs a D-U-N-S number.
 
 ## Step 2. Get an Anthropic API key
+
+**Skip this step for the first release.** The AI is off (`"ai": false` in `app.json`, `AI = "off"` in `worker/wrangler.toml`), so there's no Anthropic key to add and no AI bill. In step 4, skip `wrangler secret put ANTHROPIC_API_KEY`. In step 11, use the text under **First release: AI off** in [`docs/app-store/listing.md`](docs/app-store/listing.md). To add the AI later, set both switches to on, do this step, redeploy the server and ship an app update.
+
 
 - [ ] Sign up at [console.anthropic.com](https://console.anthropic.com).
 - [ ] **Billing:** add credit. $10 covers well over a thousand scans.

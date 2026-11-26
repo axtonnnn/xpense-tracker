@@ -6,7 +6,7 @@ import type { z } from 'zod';
 import { CheckRequestSchema, ReviewRequestSchema, ScanRequestSchema } from '../../shared/schemas';
 import { AIError, createClaude, type AIProvider } from './ai/claude';
 import { checkSupabaseKey, deleteSupabaseUser, userFrom, verifySupabaseToken, type Verify } from './auth';
-import { checkAccess, checkRevenueCatKey, forgetAccount, paymentsOn, recordUsage, trialLimit, type Feature } from './entitlement';
+import { aiOn, checkAccess, checkRevenueCatKey, forgetAccount, paymentsOn, recordUsage, trialLimit, type Feature } from './entitlement';
 import type { Env } from './env';
 import { missingSettings, pageResponse } from './pages';
 
@@ -102,6 +102,7 @@ export function createHandler(deps: Deps) {
         ok: true,
         configured: {
           payments: paymentsOn(env),
+          ai: aiOn(env),
           anthropic_key: !!env.ANTHROPIC_API_KEY,
           revenuecat_key: !!env.REVENUECAT_SECRET_KEY,
           supabase_url: /^https:\/\//.test(env.SUPABASE_URL ?? ''),
@@ -115,7 +116,7 @@ export function createHandler(deps: Deps) {
         return error(429, 'slow_down', 'Too many checks. Please wait a minute and try again.');
       }
       const [anthropic, revenuecat, supabase] = await Promise.all([
-        env.ANTHROPIC_API_KEY ? deps.ai(env).checkKey() : 'missing',
+        !aiOn(env) ? Promise.resolve('off' as const) : env.ANTHROPIC_API_KEY ? deps.ai(env).checkKey() : 'missing',
         paymentsOn(env) ? checkRevenueCatKey(env, fetchImpl) : Promise.resolve('off' as const),
         checkSupabaseKey(env, fetchImpl),
       ]);
@@ -128,6 +129,7 @@ export function createHandler(deps: Deps) {
 
     const route = ROUTES[pathname];
     if (!route && pathname !== ACCOUNT_DELETE) return error(404, 'not_found', 'Not found.');
+    if (route && !aiOn(env)) return error(404, 'ai_off', 'AI features aren’t available in this version of Xpense.');
     if (request.method !== 'POST') return error(405, 'method_not_allowed', 'Use POST.');
 
     const userId = await userFrom(request, env, verify);

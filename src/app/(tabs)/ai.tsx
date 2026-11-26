@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -13,14 +13,20 @@ import { useLiveQuery } from '@/db/live';
 import { setSettings, useSettings } from '@/db/settings';
 import { listRecentScans } from '@/db/transactions';
 import { ApiError, NeedsProError } from '@/lib/api';
-import { FREE_TRIAL_SCANS, PAYMENTS } from '@/lib/config';
+import { AI_FEATURES, FREE_TRIAL_SCANS, PAYMENTS } from '@/lib/config';
 import { formatDay, parseISODate, today } from '@/lib/dates';
 import { parseAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import type { PickSource } from '@/lib/scan';
 import { useWide } from '@/theme/tokens';
 
-export default function AIMode() {
+/** The AI mode tab; a build without the AI features (app.json → extra.ai: false) sends any link here home. */
+export default function AITab() {
+  if (!AI_FEATURES) return <Redirect href="/" />;
+  return <AIMode />;
+}
+
+function AIMode() {
   const db = useSQLiteContext();
   const settings = useSettings();
   const wide = useWide();

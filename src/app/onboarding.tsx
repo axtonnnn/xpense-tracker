@@ -9,6 +9,7 @@ import { goalWords } from '@/components/goal-ui';
 import { Mark } from '@/components/marks';
 import { Appear, timing, useMotion } from '@/components/motion';
 import { AppText, Button, Chip, Field, haptic, Notice, Screen, Segmented, Switch, TextLink } from '@/components/ui';
+import { AI_FEATURES } from '@/lib/config';
 import { createGoal } from '@/db/goals';
 import { setSettings } from '@/db/settings';
 import { useUser } from '@/lib/auth';
@@ -36,6 +37,9 @@ function guessCurrency(): string {
 type PayEvery = 'week' | 'month';
 const WEEKS_PER_MONTH = 52 / 12;
 const SHOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD'];
+
+/** The last step: the AI permission page, or the pay page when this build has no AI. */
+const LAST = AI_FEATURES ? 2 : 1;
 
 export default function Onboarding() {
   const db = useSQLiteContext();
@@ -251,7 +255,7 @@ export default function Onboarding() {
         </Appear>
       )}
 
-      {step === 2 && (
+      {step === 2 && AI_FEATURES && (
         <Appear key="s2" distance={12}>
           <AppText variant="headline" accessibilityRole="header" style={{ marginTop: 36 }}>
             AI, only if you want it
@@ -288,7 +292,7 @@ export default function Onboarding() {
       )}
 
       <View style={{ marginTop: 'auto', paddingTop: 40 }}>
-        {step < 2 ? (
+        {step < LAST ? (
           <Button title="Continue" onPress={next} />
         ) : (
           <Button title={name.trim() ? `Start, ${name.trim()}` : 'Start'} onPress={finish} loading={saving} />
@@ -299,15 +303,15 @@ export default function Onboarding() {
   );
 }
 
-/** "1 / 3" and three short lines that fill in as you go. */
+/** "1 / 3" and a short line per step that fills in as you go. */
 function Progress({ step }: { step: number }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }} accessibilityLabel={`Step ${step + 1} of 3`}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }} accessibilityLabel={`Step ${step + 1} of ${LAST + 1}`}>
       <AppText variant="index" muted>
-        {step + 1} / 3
+        {step + 1} / {LAST + 1}
       </AppText>
       <View style={{ flex: 1, flexDirection: 'row', gap: 4 }}>
-        {[0, 1, 2].map((i) => (
+        {Array.from({ length: LAST + 1 }, (_, i) => i).map((i) => (
           <Segment key={i} on={i <= step} />
         ))}
       </View>

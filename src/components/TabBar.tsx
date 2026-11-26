@@ -11,13 +11,15 @@ import { AppText, Avatar, haptic } from './ui';
 import { useSettings } from '@/db/settings';
 import { useSync } from '@/db/SyncProvider';
 import { useAuth } from '@/lib/auth';
-import { PAYMENTS } from '@/lib/config';
+import { AI_FEATURES, PAYMENTS } from '@/lib/config';
 import { usePro } from '@/lib/pro';
 import { colors, fonts, motion, useWide } from '@/theme/tokens';
 
 const TAB_ICONS: Record<string, IconName> = { index: 'dashboard', ai: 'ai', tracker: 'tracker', history: 'history', savings: 'goal' };
 /** Tabs that only show in the iPad and Mac sidebar. */
 const SIDEBAR_ONLY = ['savings'];
+/** Tabs left out of this build: AI mode when the AI features are off. */
+const HIDDEN = AI_FEATURES ? [] : ['ai'];
 
 /** Bottom tabs on phones; on iPad and Mac the same tabs become a sidebar (see the tabs layout). */
 export function TabBar(props: BottomTabBarProps) {
@@ -25,7 +27,8 @@ export function TabBar(props: BottomTabBarProps) {
 }
 
 function useTabs({ state, descriptors, emitter, navigateToTab }: BottomTabBarProps) {
-  return state.routes.map((route, index) => {
+  return state.routes.flatMap((route, index) => {
+    if (HIDDEN.includes(route.name)) return [];
     const focused = index === state.index;
     const label = descriptors[route.key]?.options.title ?? route.name;
     const onPress = () => {
@@ -35,7 +38,7 @@ function useTabs({ state, descriptors, emitter, navigateToTab }: BottomTabBarPro
         navigateToTab(route.key);
       }
     };
-    return {
+    return [{
       key: route.key,
       name: route.name,
       icon: TAB_ICONS[route.name] ?? 'dashboard',
@@ -43,7 +46,7 @@ function useTabs({ state, descriptors, emitter, navigateToTab }: BottomTabBarPro
       focused,
       onPress,
       onLongPress: () => emitter.emit({ type: 'tabLongPress', target: route.key }),
-    };
+    }];
   });
 }
 

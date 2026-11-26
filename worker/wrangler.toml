@@ -31,6 +31,9 @@ PLAY_STORE_URL = ""
 # limits below, RevenueCat isn't needed, and the pages leave out Pro and purchases. Turn it "on" together
 # with "payments": true in app.json (LAUNCH.md, "Turning on Xpense Pro").
 PAYMENTS = "off"
+# AI features: "off" for the first release, so no Anthropic key (and no AI bill) is needed. Keep it the same
+# as "ai" in app.json. To turn the AI on: AI = "on", "ai": true, LAUNCH.md step 2, then an app update.
+AI = "off"
 # Pro's prices on the home page while payments are on. Keep them the same as App Store Connect, or empty.
 PRO_PRICES = "$2.99 a month or $19.99 a year"
 

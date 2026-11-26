@@ -37,6 +37,9 @@ export function monthlyCap(env: Env, feature: Feature): number {
 export const trialLimit = (env: Env) => countVar(env.FREE_TRIAL_SCANS, DEFAULT_TRIAL_SCANS);
 
 /** Whether Xpense Pro is on sale. Off (the default), nobody needs Pro and RevenueCat isn't used. */
+/** Whether the AI features are on (AI isn't "off"). */
+export const aiOn = (env: Env) => !/^(off|false|0)$/i.test(env.AI?.trim() ?? '');
+
 export const paymentsOn = (env: Env) => /^(on|true|1)$/i.test(env.PAYMENTS?.trim() ?? '');
 const trialKey = (id: string) => `trial:${id}`;
 const usageKey = (id: string, feature: Feature, now: Date) => `usage:${id}:${now.toISOString().slice(0, 7)}:${feature}`;

@@ -3,13 +3,13 @@
 
 Questions, problems or ideas? Email {{CONTACT_EMAIL}} and we'll get back to you, usually within two working days.
 
-If it's about AI scans<!-- payments --> or Xpense Pro<!-- /payments -->, please include your **Account ID**. You'll find it at the bottom of **Settings** (tap your initial on the dashboard, or **Settings** in the sidebar on iPad and Mac).
+If it's about your account<!-- ai -->, AI scans<!-- /ai --><!-- payments --> or Xpense Pro<!-- /payments -->, please include your **Account ID**. You'll find it at the bottom of **Settings** (tap your initial on the dashboard, or **Settings** in the sidebar on iPad and Mac).
 
 ## Common questions
 
 ### How do I use Xpense on my iPad or Mac?
 
-Install Xpense from the App Store on that device and sign in the same way you did on your phone: with Apple, or with a code sent to the same email. Your entries, repeats and settings come across within a few seconds. Receipt photos stay on the device that took them.
+Install Xpense from the App Store on that device and sign in the same way you did on your phone: with Apple, or with a code sent to the same email. Your entries, repeats and settings come across within a few seconds. <!-- ai -->Receipt photos stay on the device that took them.<!-- /ai -->
 
 <!-- payments -->
 ### How do I get Xpense Pro on a new device?
@@ -33,12 +33,13 @@ Apple handles App Store refunds at [reportaproblem.apple.com](https://reportapro
 <!-- /payments -->
 ### Where is my data? Who can see it?
 
-Your entries are kept on your devices and in your private Xpense account, so they sync between your devices. Only your account can read them. Receipt photos stay on the device that took them. The [Privacy Policy](privacy-policy.md) has the details.
+Your entries are kept on your devices and in your private Xpense account, so they sync between your devices. Only your account can read them. <!-- ai -->Receipt photos stay on the device that took them.<!-- /ai --> The [Privacy Policy](privacy-policy.md) has the details.
 
 ### How do I delete my account?
 
 Open **Settings → Delete account** in the app. It deletes your account and everything in it, on every device.<!-- payments --> If you subscribe to Pro, cancel it in your App Store or Google Play account too.<!-- /payments -->
 
+<!-- ai -->
 ### Is my data used to train AI?
 
 No. Receipt photos and questions are sent to the AI only to answer that request, and only after you allow AI features. We don't keep them, and they aren't used to train AI models. The [Privacy Policy](privacy-policy.md) names the service that runs the AI. You can switch AI off in **Settings → On this device**.
@@ -59,6 +60,8 @@ Every account gets {{FREE_TRIAL_SCANS}} free scans. Xpense Pro includes up to {{
 <!-- free -->
 Every account can use up to {{PRO_MONTHLY_SCANS}} receipt scans, {{PRO_MONTHLY_CHECKS}} "Should I buy this?" checks and {{PRO_MONTHLY_REVIEWS}} monthly reviews per calendar month. A photo the AI can't read as a receipt or bill doesn't use one up.
 <!-- /free -->
+
+<!-- /ai -->
 
 ### How does the savings goal work?
 

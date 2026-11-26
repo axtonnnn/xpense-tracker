@@ -13,20 +13,30 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const PAYMENTS = JSON.parse(readFileSync(join(ROOT, 'app.json'), 'utf8')).expo.extra?.payments === true;
+const EXTRA = JSON.parse(readFileSync(join(ROOT, 'app.json'), 'utf8')).expo.extra ?? {};
+const PAYMENTS = EXTRA.payments === true;
+/** With "ai": false in app.json the build has no AI mode, so neither do the screenshots. */
+const AI = EXTRA.ai !== false;
 const APP_URL = process.env.APP_URL ?? 'http://localhost:8081';
 const OUT = join(ROOT, 'docs', 'app-store');
 const RECEIPT = join(ROOT, 'scripts', 'fixtures', 'sample-receipt.jpg');
 const FONTS = join(ROOT, 'node_modules', '@expo-google-fonts');
 const font = (path) => readFileSync(join(FONTS, path)).toString('base64');
 
-const IPHONE = {
-  '1-safe-to-spend': 'Know what’s\nsafe to spend',
-  '2-scan': 'Snap a receipt.\nThe AI does the typing.',
-  '3-needs-wants': 'Every line,\na need or a want',
-  '4-buy-check': 'Thinking of buying it?\nCheck first.',
-  '5-goal': 'Save up for what\nyou really want',
-};
+const IPHONE = AI
+  ? {
+      '1-safe-to-spend': 'Know what’s\nsafe to spend',
+      '2-scan': 'Snap a receipt.\nThe AI does the typing.',
+      '3-needs-wants': 'Every line,\na need or a want',
+      '4-buy-check': 'Thinking of buying it?\nCheck first.',
+      '5-goal': 'Save up for what\nyou really want',
+    }
+  : {
+      '1-safe-to-spend': 'Know what’s\nsafe to spend',
+      '2-tracker': 'Write it down\nin a few taps',
+      '3-history': 'Every entry,\na need or a want',
+      '4-goal': 'Save up for what\nyou really want',
+    };
 const IPAD = {
   '1-dashboard': 'Your month at a glance, on iPad and Mac',
   '2-history': 'Every entry, on every device',
@@ -59,8 +69,10 @@ async function freshApp(width, height, scale) {
   await page.getByRole('radio', { name: 'a week' }).click();
   await page.getByLabel('Hours you work in a week (optional)').fill('32');
   await page.getByLabel(/Set aside each month/).fill('300');
-  await tap('Continue');
-  await page.getByRole('switch', { name: 'Allow AI features' }).click();
+  if (AI) {
+    await tap('Continue');
+    await page.getByRole('switch', { name: 'Allow AI features' }).click();
+  }
   await tap('Start, Sam');
   await page.getByRole('tab', { name: 'Dashboard' }).waitFor();
   await page.waitForTimeout(1000);
@@ -104,38 +116,50 @@ if (PAYMENTS) {
   await withSampleData(app);
   shots['1-safe-to-spend'] = await page.screenshot();
 
-  await page.getByRole('tab', { name: 'AI mode' }).click();
-  await page.waitForTimeout(1200);
-  shots['2-scan'] = await page.screenshot();
+  if (AI) {
+    await page.getByRole('tab', { name: 'AI mode' }).click();
+    await page.waitForTimeout(1200);
+    shots['2-scan'] = await page.screenshot();
 
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), tap('Choose from photos')]);
-  await chooser.setFiles(RECEIPT);
-  await page.getByText('Check the scan').waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(1200);
-  // Scroll the item lines into view with the wheel, so only the screen's own scroll view moves: the page
-  // starts at the line above the shop's name.
-  const top = await page.getByText(/^Receipt ·/).first().boundingBox();
-  await page.mouse.move(195, 400);
-  await page.mouse.wheel(0, Math.max(0, top.y - 16));
-  await page.waitForTimeout(900);
-  shots['3-needs-wants'] = await page.screenshot();
-  await tap('Discard');
-  await page.waitForTimeout(800);
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), tap('Choose from photos')]);
+    await chooser.setFiles(RECEIPT);
+    await page.getByText('Check the scan').waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(1200);
+    // Scroll the item lines into view with the wheel, so only the screen's own scroll view moves: the page
+    // starts at the line above the shop's name.
+    const top = await page.getByText(/^Receipt ·/).first().boundingBox();
+    await page.mouse.move(195, 400);
+    await page.mouse.wheel(0, Math.max(0, top.y - 16));
+    await page.waitForTimeout(900);
+    shots['3-needs-wants'] = await page.screenshot();
+    await tap('Discard');
+    await page.waitForTimeout(800);
 
-  await page.getByLabel('What is it?').fill('Wireless earbuds');
-  await page.getByLabel('Price').fill('149');
-  await tap('Check it');
-  await page.getByText('Sleep on it').waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(1500);
-  shots['4-buy-check'] = await page.screenshot();
-  await page.goBack();
-  await page.waitForTimeout(800);
+    await page.getByLabel('What is it?').fill('Wireless earbuds');
+    await page.getByLabel('Price').fill('149');
+    await tap('Check it');
+    await page.getByText('Sleep on it').waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(1500);
+    shots['4-buy-check'] = await page.screenshot();
+    await page.goBack();
+    await page.waitForTimeout(800);
+  } else {
+    await page.getByRole('tab', { name: 'Tracker' }).click();
+    await page.waitForTimeout(800);
+    await page.getByLabel('How much did you spend?').fill('12.40');
+    await page.getByLabel('Where or what?').fill('Corner Café');
+    await page.waitForTimeout(1200);
+    shots['2-tracker'] = await page.screenshot();
+    await page.getByRole('tab', { name: 'History' }).click();
+    await page.waitForTimeout(1200);
+    shots['3-history'] = await page.screenshot();
+  }
 
   await page.getByRole('tab', { name: 'Dashboard' }).click();
   await page.waitForTimeout(800);
   await page.getByLabel(/saved of/).first().click();
   await page.waitForTimeout(1500);
-  shots['5-goal'] = await page.screenshot();
+  shots[AI ? '5-goal' : '4-goal'] = await page.screenshot();
   await page.context().close();
 }
 
@@ -229,3 +253,6 @@ await browser.close();
 // Screenshots from earlier designs.
 for (const old of ['1-progress', '2-scan', '3-needs-wants', '4-buy-check', '5-safe-to-spend']) rmSync(join(OUT, 'screenshots', `${old}.jpg`), { force: true });
 rmSync(join(OUT, 'screenshots', 'iphone-5-history.jpg'), { force: true });
+// The other set's phone screenshots, so the folder holds exactly what this build should upload.
+const other = AI ? ['2-tracker', '3-history', '4-goal'] : ['2-scan', '3-needs-wants', '4-buy-check', '5-goal'];
+for (const name of other) rmSync(join(OUT, 'screenshots', `iphone-${name}.jpg`), { force: true });

@@ -17,7 +17,7 @@ import { useSync } from '@/db/SyncProvider';
 import { allTransactions, deleteAllData } from '@/db/transactions';
 import { ApiError, deleteAccountOnServer } from '@/lib/api';
 import { useAuth, useUser } from '@/lib/auth';
-import { PAYMENTS, PRIVACY_URL, PRO_MONTHLY_SCANS, SUPPORT_URL, TERMS_URL } from '@/lib/config';
+import { AI_FEATURES, PAYMENTS, PRIVACY_URL, PRO_MONTHLY_SCANS, SUPPORT_URL, TERMS_URL } from '@/lib/config';
 import { today } from '@/lib/dates';
 import { shareCSV } from '@/lib/export';
 import { centsToInput, CURRENCIES, currencySymbol, formatMoney, parseOptionalAmount } from '@/lib/money';
@@ -350,11 +350,13 @@ function SettingsForm({ settings }: { settings: Settings }) {
             right={<Switch value={settings.appLock} onValueChange={toggleLock} label="Lock with Face ID" />}
           />
         )}
-        <ListRow
-          title="Allow AI features"
-          subtitle="Off means nothing is sent to the AI"
-          right={<Switch value={settings.aiConsent} onValueChange={(on) => setSettings(db, { ai_consent: on })} label="Allow AI features" />}
-        />
+        {AI_FEATURES && (
+          <ListRow
+            title="Allow AI features"
+            subtitle="Off means nothing is sent to the AI"
+            right={<Switch value={settings.aiConsent} onValueChange={(on) => setSettings(db, { ai_consent: on })} label="Allow AI features" />}
+          />
+        )}
       </View>
 
       <Rule />

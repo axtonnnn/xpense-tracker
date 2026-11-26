@@ -37,6 +37,11 @@ export interface Env {
    * within the monthly limits, RevenueCat is never asked, and the pages leave out Pro and purchases.
    */
   PAYMENTS?: string;
+  /**
+   * "off" leaves the AI out: the AI routes answer 404 `ai_off`, no Anthropic key is needed, and the pages
+   * leave out the AI. Keep it the same as "ai" in app.json. Anything else (the default) means on.
+   */
+  AI?: string;
   /** Local development only: treat every account as Pro. Never set this in production. */
   ALLOW_ALL_PRO?: string;
   /** Shown on the privacy policy, terms and support pages (src/pages.ts). */
