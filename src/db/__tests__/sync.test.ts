@@ -137,6 +137,52 @@ describe('sync between two devices', () => {
     }
   });
 
+  it('keeps a deleted repeating entry deleted when another device books it again before syncing', async () => {
+    const { remote } = fakeServer();
+    const phone = await device();
+    const ipad = await device();
+    await addRecurring(phone, { type: 'income', label: 'Paycheck', amountCents: 115000, category: 'salary', necessity: null, cadence: 'weekly', startOn: '2026-10-02' });
+    await syncOnce(phone, remote);
+    await syncOnce(ipad, remote);
+    await applyDueRecurring(phone, '2026-10-25', 'USD');
+    await syncOnce(phone, remote);
+    // The 23rd's paycheck was booked by mistake: it's deleted on the phone and the deletion uploaded.
+    const wrong = (await listBetween(phone, '2026-10-23', '2026-10-23'))[0].id;
+    await tick();
+    await deleteTransaction(phone, wrong);
+    await syncOnce(phone, remote);
+    // The iPad comes back from the background later and books what's due before its sync has pulled anything.
+    await tick();
+    await applyDueRecurring(ipad, '2026-10-25', 'USD');
+    await syncOnce(ipad, remote);
+    await syncOnce(phone, remote);
+    for (const db of [phone, ipad]) {
+      const paychecks = (await listBetween(db, '2026-10-01', '2026-10-31')).filter((t) => t.type === 'income');
+      expect(paychecks.map((t) => t.occurred_on).sort()).toEqual(['2026-10-02', '2026-10-09', '2026-10-16']);
+    }
+  });
+
+  it('still keeps a repeating entry that was edited after it was deleted elsewhere', async () => {
+    const { remote } = fakeServer();
+    const phone = await device();
+    const ipad = await device();
+    await addRecurring(phone, { type: 'income', label: 'Paycheck', amountCents: 115000, category: 'salary', necessity: null, cadence: 'weekly', startOn: '2026-10-23' });
+    await syncOnce(phone, remote);
+    await syncOnce(ipad, remote);
+    await applyDueRecurring(phone, '2026-10-25', 'USD');
+    await applyDueRecurring(ipad, '2026-10-25', 'USD');
+    const id = (await listBetween(phone, '2026-10-23', '2026-10-23'))[0].id;
+    await tick();
+    await deleteTransaction(phone, id);
+    await syncOnce(phone, remote);
+    // The iPad changes the amount after the deletion: the later edit wins, as for any entry.
+    await tick();
+    await updateTransaction(ipad, id, { amountCents: 120000 });
+    await syncOnce(ipad, remote);
+    await syncOnce(phone, remote);
+    for (const db of [phone, ipad]) expect((await listBetween(db, '2026-10-23', '2026-10-23')).map((t) => t.amount_cents)).toEqual([120000]);
+  });
+
   it('does not bring back an entry deleted here but not yet uploaded', async () => {
     const { remote } = fakeServer();
     const phone = await device();
