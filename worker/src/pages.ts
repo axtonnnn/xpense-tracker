@@ -5,7 +5,7 @@
 import privacyPolicy from '../../docs/privacy-policy.md';
 import support from '../../docs/support.md';
 import terms from '../../docs/terms.md';
-import { monthlyCap, paymentsOn, trialLimit } from './entitlement';
+import { aiOn, monthlyCap, paymentsOn, trialLimit } from './entitlement';
 import type { Env } from './env';
 import { escapeHtml, renderMarkdown } from './markdown';
 
@@ -46,8 +46,17 @@ function forPayments(markdown: string, on: boolean): string {
   return markdown.replace(new RegExp(`<!-- ${drop} -->[\\s\\S]*?<!-- /${drop} -->\\n?`, 'g'), '');
 }
 
+/**
+ * Text about the AI sits between <!-- ai --> and <!-- /ai -->, and its no-AI counterpart between <!-- noai -->
+ * and <!-- /noai -->. While AI is "off" (worker/wrangler.toml) the AI text is dropped, and the other way round.
+ */
+function forAi(markdown: string, on: boolean): string {
+  const drop = on ? 'noai' : 'ai';
+  return markdown.replace(new RegExp(`<!-- ${drop} -->[\\s\\S]*?<!-- /${drop} -->\\n?`, 'g'), '');
+}
+
 function fill(markdown: string, env: Env): string {
-  markdown = forPayments(markdown, paymentsOn(env));
+  markdown = forAi(forPayments(markdown, paymentsOn(env)), aiOn(env));
   const email = setting(env, 'CONTACT_EMAIL');
   const values: Record<string, string> = {
     OWNER_NAME: setting(env, 'OWNER_NAME'),
@@ -299,13 +308,14 @@ function home(env: Env): string {
   const trial = trialLimit(env);
   const scans = monthlyCap(env, 'scan');
   const prices = env.PRO_PRICES?.trim();
+  const ai = aiOn(env);
   const devices = https(env.PLAY_STORE_URL) ? 'iPhone, iPad and Mac with Apple silicon. Android too.' : 'For iPhone, iPad and Mac with Apple silicon.';
   const body = `
 <main>
 <section class="intro" aria-label="Introduction">
   <span class="eyebrow">A budget for your first paychecks</span>
   <h1>${words('Spend on what matters.')}</h1>
-  <p class="lead">Xpense shows what’s safe to spend after rent, bills and saving. Snap a receipt and the AI types it in, every line sorted into a need or a want.</p>
+  <p class="lead">Xpense shows what’s safe to spend after rent, bills and saving.${ai ? ' Snap a receipt and the AI types it in, every line sorted into a need or a want.' : ' Every expense sorted into a need or a want.'}</p>
   <div class="actions">${storeButtons(env)}</div>
   <div aria-hidden="true" style="margin-top:clamp(48px,8vw,96px)">
     <div class="ticks"><span style="left:0">needs 55%</span><span style="left:55%">wants 5%</span><span style="left:73%">left 27%</span>
@@ -320,7 +330,7 @@ function home(env: Env): string {
   <h2>How it works</h2>
   <div class="steps">
     <div><span class="mono quiet" style="font-size:12px">01</span><h3>Tell it your pay</h3><p>Weekly shifts or a monthly salary. Add rent and bills once, and they repeat on their own.</p></div>
-    <div><span class="mono quiet" style="font-size:12px">02</span><h3>Snap your receipts</h3><p>The AI reads every line and sorts it into needs and wants. You check it and save.</p></div>
+    <div><span class="mono quiet" style="font-size:12px">02</span>${ai ? '<h3>Snap your receipts</h3><p>The AI reads every line and sorts it into needs and wants. You check it and save.</p>' : '<h3>Write down what you spend</h3><p>A few taps for each expense, sorted into needs and wants. Xpense guesses the category from the shop’s name.</p>'}</div>
     <div><span class="mono quiet" style="font-size:12px">03</span><h3>Know what’s safe</h3><p>One number for what you can still spend this month, and how close you are to what you’re saving for.</p></div>
   </div>
 </section>
@@ -350,7 +360,7 @@ ${paymentsOn(env) ? `<section id="pro" aria-label="Free and Pro">
 <section aria-label="Private by design">
   <div class="private">
     <h2>Private by design</h2>
-    <ul><li>No bank login. You choose what to write down.</li><li>The AI asks first, and we don’t keep your photos.</li><li>No ads, no tracking, and we never sell your data.</li><li>iPhone, iPad and Mac, kept in sync with your account.</li></ul>
+    <ul><li>No bank login. You choose what to write down.</li>${ai ? '<li>The AI asks first, and we don’t keep your photos.</li>' : ''}<li>No ads, no tracking, and we never sell your data.</li><li>iPhone, iPad and Mac, kept in sync with your account.</li></ul>
   </div>
 </section>
 

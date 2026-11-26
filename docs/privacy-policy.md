@@ -11,7 +11,12 @@ Xpense ("we", "us") is a budgeting app that helps you track income and expenses 
 
 - You sign in with Apple or with a code sent to your email, so your budget is the same on your iPhone, iPad and Mac.
 - Your entries are kept on your devices and in your private Xpense account. **Only you can see them.** No bank login, no advertising, no tracking, and we never sell data.
+<!-- ai -->
 - AI features only run after you allow them. They send just what's needed to answer that request. **We don't keep it.**
+<!-- /ai -->
+<!-- noai -->
+- This version of Xpense has no AI features. Nothing you enter is sent to an AI.
+<!-- /noai -->
 - You can delete your account, and everything in it, from inside the app at any time.
 
 ## Your account
@@ -30,13 +35,14 @@ Accounts are run by **Supabase**, our sign-in and database provider. Sign-in cod
 |---|---|
 | Entries (amount, date, category, shop, notes, need/want split), receipt lines, repeating bills and paychecks | On your devices and in your Xpense account, so it syncs between them |
 | Settings (currency, pay, savings goal and what you're saving for, hours per week) | On your devices and in your account |
-| Receipt photos you save | **Only on the device that took them**. They are never uploaded to your account |
-| App lock and AI permission | Only on that device |
+<!-- ai -->| Receipt photos you save | **Only on the device that took them**. They are never uploaded to your account |<!-- /ai -->
+| App lock<!-- ai --> and AI permission<!-- /ai --> | Only on that device |
 
 Your account data is stored by Supabase in a database protected by row-level security: each account can only read and change its own records. It's encrypted in transit (HTTPS) and at rest. We access it only to keep the service running, to help you when you ask, or when the law requires it.
 
 You can export your entries at any time with **Settings → Export as CSV**<!-- payments --> (Pro)<!-- /payments -->.
 
+<!-- ai -->
 ## AI features (optional)
 
 Xpense asks for your permission before using AI. You can turn AI off at any time in **Settings → Allow AI features**.
@@ -57,6 +63,8 @@ AI answers can contain mistakes. Always check amounts before saving.
 
 <!-- payments -->To give free accounts their {{FREE_TRIAL_SCANS}} trial scans and to apply Pro's monthly fair-use limits<!-- /payments --><!-- free -->To apply the monthly fair-use limits<!-- /free -->, our AI service keeps small counters linked to your account ID: how many AI requests you made, and in which month. Monthly counters expire after about 40 days. They are deleted when you delete your account.
 
+<!-- /ai -->
+
 <!-- payments -->
 ## Purchases
 
@@ -69,8 +77,8 @@ Subscriptions are processed by Apple (App Store) or Google (Google Play). We nev
 |---|---|
 | Supabase | Sign-in and the database that keeps your account's data |
 | Our email provider | Sends sign-in codes |
-| Cloudflare | Hosts our AI service and this website; processes network data such as IP addresses to deliver and protect them |
-| Anthropic | Runs the AI model that reads receipts and answers questions |
+| Cloudflare | Hosts our <!-- ai -->AI <!-- /ai -->service and this website; processes network data such as IP addresses to deliver and protect them |
+<!-- ai -->| Anthropic | Runs the AI model that reads receipts and answers questions |<!-- /ai -->
 <!-- payments -->| RevenueCat | Manages subscription status |<!-- /payments -->
 | Apple / Google | Sign in with Apple, app distribution<!-- payments --> and payments<!-- /payments --> |
 
@@ -78,7 +86,7 @@ We do not use analytics, advertising or tracking SDKs, and we do not sell or sha
 
 ## Deleting your account
 
-In the app, open **Settings → Delete account**. This deletes your sign-in, every entry, receipt line, repeat and setting in your account, your usage counters<!-- payments --> and your RevenueCat customer record<!-- /payments -->, and erases the copy on that device. Copies on your other devices are removed the next time they open Xpense.<!-- payments --> If you subscribe to Pro, cancel the subscription in your App Store or Google Play account too; deleting your account doesn't stop the store from charging you.<!-- /payments -->
+In the app, open **Settings → Delete account**. This deletes your sign-in, every entry, receipt line, repeat and setting in your account<!-- ai -->, your usage counters<!-- /ai --><!-- payments --> and your RevenueCat customer record<!-- /payments -->, and erases the copy on that device. Copies on your other devices are removed the next time they open Xpense.<!-- payments --> If you subscribe to Pro, cancel the subscription in your App Store or Google Play account too; deleting your account doesn't stop the store from charging you.<!-- /payments -->
 
 Signing out keeps your account; the device keeps its copy until you sign in again.
 
@@ -88,7 +96,9 @@ Xpense is meant for people who earn or save their own money, including teenagers
 
 ## Your choices and rights
 
+<!-- ai -->
 - Turn off AI features in Settings at any time.
+<!-- /ai -->
 - Change your name, pay and goals in Settings, or delete your account there.
 - Depending on where you live (for example under GDPR or CCPA), you may have additional rights to access, correct or delete your data. Contact us at {{CONTACT_EMAIL}} and we will respond within 30 days.
 

@@ -310,6 +310,31 @@ describe('payments off', () => {
   });
 });
 
+describe('AI off', () => {
+  const off = { AI: 'off', ANTHROPIC_API_KEY: '' };
+
+  it('answers the AI routes with ai_off and never calls the AI', async () => {
+    const { handle, env, ai } = setup({ env: off });
+    for (const [path, body] of [['/v1/scan', scanBody], ['/v1/check', checkBody], ['/v1/review', reviewBody]] as const) {
+      const res = await handle(post(path, body), env);
+      expect(res.status).toBe(404);
+      expect(((await read(res)) as { error: { code: string } }).error.code).toBe('ai_off');
+    }
+    expect(ai.monthlyReview).not.toHaveBeenCalled();
+  });
+
+  it('reports AI off on /health and skips the Anthropic key check', async () => {
+    const { handle, env, ai } = setup({ env: off });
+    const deep = (await (await handle(new Request('https://xpense.example/health?deep=1'), env)).json()) as {
+      configured: { ai: boolean };
+      keys: { anthropic: string };
+    };
+    expect(deep.configured.ai).toBe(false);
+    expect(deep.keys.anthropic).toBe('off');
+    expect(ai.checkKey).not.toHaveBeenCalled();
+  });
+});
+
 describe('health', () => {
   const health = (deep: boolean) => new Request(`https://xpense.example/health${deep ? '?deep=1' : ''}`);
 

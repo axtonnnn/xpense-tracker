@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 type Extra = {
   apiUrl?: string;
+  ai?: boolean;
   payments?: boolean;
   emailSignIn?: boolean;
   supabaseUrl?: string;
@@ -22,6 +23,14 @@ const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
  */
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || extra.apiUrl || '').replace(/\/$/, '');
 export const DEMO_AI = __DEV__ && API_URL === 'demo';
+
+/**
+ * Whether the AI features are in this build (app.json → extra.ai, on unless set to false). Off: no AI mode
+ * tab, no receipt scans, buy checks or monthly reviews, and nothing is ever sent to the AI, so the server
+ * needs no Anthropic key. Xpense's first release ships with it off; set it back to true (and add the key,
+ * LAUNCH.md step 2) to bring the AI in with an update.
+ */
+export const AI_FEATURES = extra.ai !== false;
 
 export const REVENUECAT_KEY =
   Platform.select({ ios: extra.revenueCatIosKey, android: extra.revenueCatAndroidKey }) ?? '';

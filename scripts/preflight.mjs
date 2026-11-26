@@ -33,6 +33,8 @@ else fail('expo.extra.apiUrl is not your AI server', 'Deploy the AI server (LAUN
 
 const payments = extra.payments === true;
 const emailSignIn = extra.emailSignIn === true;
+const ai = extra.ai !== false;
+if (!ai) ok('AI features are off: no AI mode, and no Anthropic key needed');
 if (!emailSignIn) ok('Sign-in: Sign in with Apple only (no email sender or domain needed)');
 const rcKey = (extra.revenueCatIosKey ?? '').trim();
 if (!payments) ok('Payments are off: every feature is free, and RevenueCat isn’t needed yet');
@@ -132,7 +134,9 @@ if (/^https:\/\//.test(apiUrl)) {
     ok('Server is up');
     const { anthropic, revenuecat, supabase } = health.keys;
     const { missing_page_settings: missing } = health.configured;
-    if (anthropic === 'ok') ok('Anthropic accepted the API key');
+    if (!ai || anthropic === 'off') {
+      // Nothing to check while the AI is off.
+    } else if (anthropic === 'ok') ok('Anthropic accepted the API key');
     else if (anthropic === 'missing') fail('The ANTHROPIC_API_KEY secret is missing', 'cd worker && npx wrangler secret put ANTHROPIC_API_KEY');
     else if (anthropic === 'invalid') fail('Anthropic rejected the ANTHROPIC_API_KEY secret', 'Create a key at console.anthropic.com → API keys, then: cd worker && npx wrangler secret put ANTHROPIC_API_KEY');
     else fail('The server couldn’t reach Anthropic', 'Try again in a minute (status: status.anthropic.com).');
@@ -140,6 +144,12 @@ if (/^https:\/\//.test(apiUrl)) {
       fail(
         `Payments are ${payments ? 'on' : 'off'} in app.json but ${health.configured.payments ? 'on' : 'off'} on the server`,
         `Set PAYMENTS = "${payments ? 'on' : 'off'}" in worker/wrangler.toml and redeploy (cd worker && npx wrangler deploy), or change "payments" in app.json.`,
+      );
+    }
+    if (health.configured.ai !== undefined && health.configured.ai !== ai) {
+      fail(
+        `AI is ${ai ? 'on' : 'off'} in app.json but ${health.configured.ai ? 'on' : 'off'} on the server`,
+        `Set AI = "${ai ? 'on' : 'off'}" in worker/wrangler.toml and redeploy (cd worker && npx wrangler deploy), or change "ai" in app.json.`,
       );
     }
     if (!payments || revenuecat === 'off') {
@@ -161,8 +171,9 @@ if (/^https:\/\//.test(apiUrl)) {
       else fail(`${path} answered ${status || 'nothing'}`, 'Redeploy the server: cd worker && npx wrangler deploy');
     }
 
-    if (WITH_AI && !emailSignIn) note('Skipped the real AI scan: it signs in with an email code, and email sign-in is off', 'Scan a receipt in TestFlight instead (the server check above already confirmed your Anthropic key).');
-    const token = WITH_AI && emailSignIn && anthropic === 'ok' && supabase === 'ok' ? await signInWithEmailCode() : null;
+    if (WITH_AI && !ai) note('Skipped the real AI scan: AI features are off', 'Nothing to test until you turn the AI on.');
+    else if (WITH_AI && !emailSignIn) note('Skipped the real AI scan: it signs in with an email code, and email sign-in is off', 'Scan a receipt in TestFlight instead (the server check above already confirmed your Anthropic key).');
+    const token = WITH_AI && ai && emailSignIn && anthropic === 'ok' && supabase === 'ok' ? await signInWithEmailCode() : null;
     if (token) {
       section('Real AI scan (scripts/fixtures/sample-receipt.jpg, total 50.00)');
       console.log('  … reading the receipt; at max effort this can take up to a minute');

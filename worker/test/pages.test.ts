@@ -118,6 +118,25 @@ describe('public pages', () => {
     expect(paid).not.toContain('payments -->');
   });
 
+  it('leaves out the AI while AI is off', async () => {
+    const off = { ...filled, AI: 'off' };
+    const home = (await get('/', off)).html;
+    expect(home).not.toContain('the AI');
+    expect(home).toContain('Write down what you spend');
+    const privacy = (await get('/privacy', off)).html;
+    expect(privacy).not.toContain('Anthropic');
+    expect(privacy).toContain('This version of Xpense has no AI features.');
+    expect(privacy).not.toContain('ai -->');
+    const terms = (await get('/terms', off)).html;
+    expect(terms).toContain('This version of Xpense has no AI features.');
+    expect(terms).not.toContain('receipt scans');
+    const support = (await get('/support', off)).html;
+    expect(support).not.toContain('AI scans');
+    const on = (await get('/privacy')).html;
+    expect(on).toContain('Anthropic');
+    expect(on).not.toContain('no AI features');
+  });
+
   it('loads its fonts from this site only', async () => {
     const { res, html } = await get('/');
     expect(html).toContain('url(/fonts/geist-400.woff2)');
@@ -132,6 +151,7 @@ describe('public pages', () => {
       ok: true,
       configured: {
         payments: false,
+        ai: true,
         anthropic_key: true,
         revenuecat_key: true,
         supabase_url: false,

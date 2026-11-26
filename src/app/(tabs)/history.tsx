@@ -9,6 +9,7 @@ import { useEntrance } from '@/components/motion';
 import { DayHeader, TxRow } from '@/components/money-ui';
 import { EmptyPage } from '@/components/pictures';
 import { AppText, Chip, EmptyState, IconButton, PullControl, TextLink, useMargin } from '@/components/ui';
+import { AI_FEATURES } from '@/lib/config';
 import { useLiveQuery } from '@/db/live';
 import { useSettings, type Settings } from '@/db/settings';
 import { usePullToSync } from '@/db/SyncProvider';
@@ -226,7 +227,9 @@ function HistoryList({
                 ? 'Try another word, or look in another month.'
                 : filtered
                   ? 'Nothing of this kind this month.'
-                  : 'Add what you spend in the Tracker, or scan a receipt in AI mode.'
+                  : AI_FEATURES
+                    ? 'Add what you spend in the Tracker, or scan a receipt in AI mode.'
+                    : 'Add what you spend in the Tracker.'
             }
             action={searching ? <TextLink label="Clear search" onPress={() => setQuery('')} /> : undefined}
           />
