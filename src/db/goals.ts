@@ -5,6 +5,7 @@ import { recordDeletions } from './changes';
 import { newId, nowISO } from './ids';
 import { notifyChange, useLiveQuery } from './live';
 import { inTransaction } from './tx';
+import { endOfMonth } from '@/lib/dates';
 import { savedTotal, type DepositKind, type GoalStatus } from '@/lib/goal';
 
 export type Goal = {
@@ -146,6 +147,51 @@ export async function addDeposit(
   );
   notifyChange();
   return id;
+}
+
+/**
+ * The new-month check-in's "Yes, add": puts last month's set-aside into the goal and marks the month
+ * answered, together. Safe to call twice (a double tap, or a second device answering before it synced):
+ * the deposit has a fixed id per goal and month, and a month that's already answered adds nothing.
+ * Returns whether money was added.
+ */
+export async function answerCheckin(
+  db: SQLiteDatabase,
+  c: { goalId: string; month: string; amountCents: number; note: string },
+): Promise<boolean> {
+  const key = c.month.slice(0, 7);
+  const id = `${c.goalId}:checkin:${key}`;
+  let added = false;
+  await inTransaction(db, async () => {
+    const now = nowISO();
+    const answered = await db.getFirstAsync<{ value: string }>("SELECT value FROM settings WHERE key = 'goal_checkin'");
+    const exists = await db.getFirstAsync('SELECT 1 FROM goal_deposits WHERE id = ?', id);
+    if (answered?.value !== key && !exists) {
+      await db.runAsync(
+        `INSERT INTO goal_deposits (id, goal_id, amount_cents, occurred_on, note, kind, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'deposit', ?, ?)`,
+        id,
+        c.goalId,
+        Math.abs(c.amountCents),
+        // Dated in the month it belongs to, so it counts as that month's set-aside.
+        endOfMonth(c.month),
+        c.note,
+        now,
+        now,
+      );
+      added = true;
+    }
+    if (answered?.value !== key) {
+      await db.runAsync(
+        `INSERT INTO settings (key, value, updated_at, dirty) VALUES ('goal_checkin', ?, ?, 1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, dirty = 1`,
+        key,
+        now,
+      );
+    }
+  });
+  notifyChange();
+  return added;
 }
 
 export async function deleteDeposit(db: SQLiteDatabase, id: string): Promise<void> {

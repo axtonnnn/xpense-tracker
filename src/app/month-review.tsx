@@ -11,7 +11,9 @@ import { useLiveQuery } from '@/db/live';
 import { useSettings } from '@/db/settings';
 import { listBetween } from '@/db/transactions';
 import { reviewRequest } from '@/lib/ai-context';
+import { answerCache } from '@/lib/answer-cache';
 import { ApiError, monthlyReview, NeedsProError } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { pctChange, totals } from '@/lib/budget';
 import { PAYMENTS } from '@/lib/config';
 import { addMonths, endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
@@ -20,18 +22,19 @@ import { useRequirePro } from '@/lib/pro';
 import { colors } from '@/theme/tokens';
 
 // One review per month per session: coming back shows it again without asking the AI twice.
-const reviews = new Map<string, ReviewResult>();
+const reviews = answerCache<ReviewResult>();
 
 export default function MonthReview() {
   const settings = useSettings();
   const goal = useActiveGoal();
   const requirePro = useRequirePro();
+  const account = useAuth().user?.id;
   const t = today();
   const monthStart = startOfMonth(t);
   const prevStart = addMonths(monthStart, -1, 1);
   const { data: txs } = useLiveQuery((d) => listBetween(d, prevStart, endOfMonth(t)), [prevStart, t]);
   const key = t.slice(0, 7);
-  const [result, setResult] = useState<ReviewResult | null>(reviews.get(key) ?? null);
+  const [result, setResult] = useState<ReviewResult | null>(reviews.get(account, key) ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
@@ -45,7 +48,7 @@ export default function MonthReview() {
       const answer = await monthlyReview(
         reviewRequest({ txs, today: t, settings, goal: goal ? { name: goal.goal.name, target_cents: goal.goal.target_cents, saved: goal.saved } : null }),
       );
-      reviews.set(key, answer);
+      reviews.set(account, key, answer);
       haptic('success');
       setResult(answer);
     } catch (e) {

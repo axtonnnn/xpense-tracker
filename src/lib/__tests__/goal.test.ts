@@ -5,11 +5,14 @@ import {
   arrivalMonth,
   checkinDue,
   extraFor,
+  goalPercent,
   monthsBetween,
   movesBetween,
   progress,
   savedTotal,
   savingsEffect,
+  shownLeft,
+  shownSaved,
   type DepositLike,
 } from '../goal';
 
@@ -87,6 +90,13 @@ describe('when the goal is reached', () => {
     expect(arrivalMonth({ today: '2026-11-01', target: 120000, saved: 0, setAside: 30000, depositedThisMonth: 0 })).toBe('2027-02-01');
   });
 
+  it('does not count money already put in this month twice', () => {
+    const deposits = [dep('2026-09-10', 60000), dep('2026-10-05', 30000)];
+    const thisMonth = movesBetween(deposits, '2026-10-01', '2026-10-31').deposits;
+    // $900 saved, October's $300 already in, $1,000 to reach: that takes November's set-aside, not October's.
+    expect(arrivalMonth({ today: '2026-10-25', target: 100000, saved: savedTotal(deposits), setAside: 30000, depositedThisMonth: thisMonth })).toBe('2026-11-01');
+  });
+
   it('is this month once saved, and unknown with nothing set aside', () => {
     expect(arrivalMonth({ today: '2026-10-25', target: 1000, saved: 1000, setAside: 0, depositedThisMonth: 0 })).toBe('2026-10-01');
     expect(arrivalMonth({ today: '2026-10-25', target: 120000, saved: 0, setAside: 0, depositedThisMonth: 0 })).toBeNull();
@@ -111,5 +121,28 @@ describe('new month check-in', () => {
     expect(checkinDue({ ...base, deposits: [dep('2026-10-01', 30000)] })).toBeNull();
     expect(checkinDue({ ...base, startedOn: '2026-11-01', deposits: [] })).toBeNull();
     expect(checkinDue({ ...base, setAside: 0, deposits: [] })).toBeNull();
+  });
+});
+
+describe('how close the goal looks', () => {
+  it('never shows 100% while something is still left', () => {
+    expect(goalPercent(9_960, 10_000)).toBe(99);
+    expect(goalPercent(9_999, 10_000)).toBe(99);
+    expect(goalPercent(10_000, 10_000)).toBe(100);
+    expect(goalPercent(12_000, 10_000)).toBe(100);
+    expect(goalPercent(2_550, 10_000)).toBe(25);
+    expect(goalPercent(0, 10_000)).toBe(0);
+  });
+
+  it('shows saved rounded down and what is left rounded up, so "$100 of $100" never appears early', () => {
+    // $99.60 of $100: "$99 of $100", $1 left, not "$100 of $100" and "$0" left.
+    expect(shownSaved(9_960, 10_000)).toBe(9_900);
+    expect(shownLeft(9_960, 10_000)).toBe(100);
+    // Reached: the real amount, nothing left.
+    expect(shownSaved(10_040, 10_000)).toBe(10_040);
+    expect(shownLeft(10_040, 10_000)).toBe(0);
+    // Whole amounts are shown as they are.
+    expect(shownSaved(4_000, 10_000)).toBe(4_000);
+    expect(shownLeft(4_000, 10_000)).toBe(6_000);
   });
 });

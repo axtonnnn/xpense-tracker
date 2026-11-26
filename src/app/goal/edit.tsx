@@ -9,9 +9,9 @@ import { useToast } from '@/components/Toast';
 import { AppText, Button, Field, haptic, Notice, Screen, TextLink, TopBar } from '@/components/ui';
 import { createGoal, deleteGoal, updateGoal, useActiveGoal } from '@/db/goals';
 import { setSettings, useSettings } from '@/db/settings';
-import { today } from '@/lib/dates';
-import { arrivalMonth, monthName } from '@/lib/goal';
-import { centsToInput, currencySymbol, formatMoney, parseAmount } from '@/lib/money';
+import { endOfMonth, startOfMonth, today } from '@/lib/dates';
+import { arrivalMonth, monthName, movesBetween } from '@/lib/goal';
+import { centsToInput, currencySymbol, formatMoney, parseAmount, parseOptionalAmount } from '@/lib/money';
 import { colors } from '@/theme/tokens';
 
 /** Start a savings goal, or change the one you have: what it is, what it costs, and the monthly set-aside. */
@@ -47,10 +47,12 @@ function GoalForm({
   const t = today();
   const symbol = currencySymbol(currency);
   const target = parseAmount(cost);
-  const start = parseAmount(already) ?? 0;
-  const per = parseAmount(monthly) ?? 0;
-  const saved = state ? state.saved : start;
-  const arrival = target && target > 0 && per > 0 ? arrivalMonth({ today: t, target, saved, setAside: per, depositedThisMonth: 0 }) : null;
+  const start = parseOptionalAmount(already);
+  const per = parseOptionalAmount(monthly);
+  const saved = state ? state.saved : (start ?? 0);
+  // What already went in this month is part of `saved`, so it can't count again as this month's set-aside.
+  const thisMonth = state ? movesBetween(state.deposits, startOfMonth(t), endOfMonth(t)).deposits : 0;
+  const arrival = target && target > 0 && per !== null && per > 0 ? arrivalMonth({ today: t, target, saved, setAside: per, depositedThisMonth: thisMonth }) : null;
 
   const save = async () => {
     setError(null);
@@ -61,6 +63,10 @@ function GoalForm({
     if (!target || target <= 0) {
       haptic('warning');
       return setError('Write what it costs.');
+    }
+    if (start === null || per === null) {
+      haptic('warning');
+      return setError('Write amounts of zero or more, or leave them empty.');
     }
     setSaving(true);
     try {
@@ -132,7 +138,7 @@ function GoalForm({
                 'You’ve already saved enough.'
               ) : (
                 <>
-                  At {formatMoney(per, currency, { compact: true })} a month, you’ll get there around <AppText weight="medium">{monthName(arrival, t)}</AppText>.
+                  At {formatMoney(per ?? 0, currency, { compact: true })} a month, you’ll get there around <AppText weight="medium">{monthName(arrival, t)}</AppText>.
                 </>
               )}
             </AppText>

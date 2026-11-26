@@ -3,7 +3,7 @@ import { describe, expect, it } from '@jest/globals';
 import { categorize } from '../categorize';
 import { niceTicks, roundedTopBar } from '../chart';
 import { addMonths, isValidISODate, startOfWeek } from '../dates';
-import { parseAmount } from '../money';
+import { parseAmount, parseOptionalAmount } from '../money';
 import { dueOccurrences, monthlyEquivalent, resumeOn, upcomingOccurrences, type RecurringRule } from '../recurring';
 
 describe('parseAmount', () => {
@@ -22,6 +22,25 @@ describe('parseAmount', () => {
   it('rejects empty or junk input', () => {
     expect(parseAmount('')).toBeNull();
     expect(parseAmount('abc')).toBeNull();
+  });
+});
+
+describe('parseOptionalAmount', () => {
+  it('treats blank as zero', () => {
+    expect(parseOptionalAmount('')).toBe(0);
+    expect(parseOptionalAmount('   ')).toBe(0);
+  });
+
+  it('reads zero and positive amounts', () => {
+    expect(parseOptionalAmount('0')).toBe(0);
+    expect(parseOptionalAmount('2,400.50')).toBe(240050);
+    expect(parseOptionalAmount('$ 300')).toBe(30000);
+  });
+
+  it('rejects typos and negative amounts instead of saving them', () => {
+    expect(parseOptionalAmount('abc')).toBeNull();
+    expect(parseOptionalAmount('-200')).toBeNull();
+    expect(parseOptionalAmount('-0.01')).toBeNull();
   });
 });
 
@@ -56,6 +75,20 @@ describe('categorize', () => {
     ['CVS pharmacy', 'health', 'need'],
   ])('%s → %s (%s)', (text, category, necessity) => {
     expect(categorize(text)).toMatchObject({ category, necessity });
+  });
+
+  it('treats accented letters as part of a word', () => {
+    expect(categorize('Café Nero')).toMatchObject({ category: 'dining', matched: 'café' });
+    expect(categorize('café')).toMatchObject({ category: 'dining', matched: 'café' });
+    expect(categorize('Barça shop')).toBeNull();
+    expect(categorize('Señor Taco')).toMatchObject({ category: 'dining', matched: 'taco' });
+  });
+
+  it('only matches whole words', () => {
+    expect(categorize('barber')).toMatchObject({ category: 'personal_care', matched: 'barber' });
+    expect(categorize('Publix')).toMatchObject({ category: 'groceries' });
+    expect(categorize('Disney+')).toMatchObject({ category: 'subscriptions' });
+    expect(categorize('H&M')).toMatchObject({ category: 'shopping', matched: 'h&m' });
   });
 
   it('returns null when unsure', () => {

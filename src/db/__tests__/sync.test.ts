@@ -7,7 +7,7 @@ import { migrate } from '../migrate';
 import { applyDueRecurring, addRecurring } from '../recurring';
 import { getSettings, setSettings } from '../settings';
 import { syncOnce, pendingChanges, type Remote, type RemoteRecord } from '../sync';
-import { deleteTransaction, getTransaction, insertTransaction, listBetween, saveScannedReceipt, updateTransaction } from '../transactions';
+import { deleteAllData, deleteTransaction, getTransaction, insertTransaction, listBetween, saveScannedReceipt, updateTransaction } from '../transactions';
 import { nodeDatabase } from '@/test/node-db';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -137,6 +137,52 @@ describe('sync between two devices', () => {
     }
   });
 
+  it('keeps a deleted repeating entry deleted when another device books it again before syncing', async () => {
+    const { remote } = fakeServer();
+    const phone = await device();
+    const ipad = await device();
+    await addRecurring(phone, { type: 'income', label: 'Paycheck', amountCents: 115000, category: 'salary', necessity: null, cadence: 'weekly', startOn: '2026-10-02' });
+    await syncOnce(phone, remote);
+    await syncOnce(ipad, remote);
+    await applyDueRecurring(phone, '2026-10-25', 'USD');
+    await syncOnce(phone, remote);
+    // The 23rd's paycheck was booked by mistake: it's deleted on the phone and the deletion uploaded.
+    const wrong = (await listBetween(phone, '2026-10-23', '2026-10-23'))[0].id;
+    await tick();
+    await deleteTransaction(phone, wrong);
+    await syncOnce(phone, remote);
+    // The iPad comes back from the background later and books what's due before its sync has pulled anything.
+    await tick();
+    await applyDueRecurring(ipad, '2026-10-25', 'USD');
+    await syncOnce(ipad, remote);
+    await syncOnce(phone, remote);
+    for (const db of [phone, ipad]) {
+      const paychecks = (await listBetween(db, '2026-10-01', '2026-10-31')).filter((t) => t.type === 'income');
+      expect(paychecks.map((t) => t.occurred_on).sort()).toEqual(['2026-10-02', '2026-10-09', '2026-10-16']);
+    }
+  });
+
+  it('still keeps a repeating entry that was edited after it was deleted elsewhere', async () => {
+    const { remote } = fakeServer();
+    const phone = await device();
+    const ipad = await device();
+    await addRecurring(phone, { type: 'income', label: 'Paycheck', amountCents: 115000, category: 'salary', necessity: null, cadence: 'weekly', startOn: '2026-10-23' });
+    await syncOnce(phone, remote);
+    await syncOnce(ipad, remote);
+    await applyDueRecurring(phone, '2026-10-25', 'USD');
+    await applyDueRecurring(ipad, '2026-10-25', 'USD');
+    const id = (await listBetween(phone, '2026-10-23', '2026-10-23'))[0].id;
+    await tick();
+    await deleteTransaction(phone, id);
+    await syncOnce(phone, remote);
+    // The iPad changes the amount after the deletion: the later edit wins, as for any entry.
+    await tick();
+    await updateTransaction(ipad, id, { amountCents: 120000 });
+    await syncOnce(ipad, remote);
+    await syncOnce(phone, remote);
+    for (const db of [phone, ipad]) expect((await listBetween(db, '2026-10-23', '2026-10-23')).map((t) => t.amount_cents)).toEqual([120000]);
+  });
+
   it('does not bring back an entry deleted here but not yet uploaded', async () => {
     const { remote } = fakeServer();
     const phone = await device();
@@ -226,5 +272,22 @@ describe('sync between two devices', () => {
     expect(await pendingChanges(phone)).toBe(1);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  it('leaves nothing on the device after the account is deleted, savings goals included', async () => {
+    const { remote, rows } = fakeServer();
+    const phone = await device();
+    const goalId = await createGoal(phone, { name: 'A laptop', targetCents: 120000, startedOn: '2026-09-20', alreadySavedCents: 12000 });
+    await addDeposit(phone, { goalId, amountCents: 30000, occurredOn: '2026-10-01', note: 'October' });
+    await insertTransaction(phone, expense('Green Valley Market', 5000));
+
+    await deleteAllData(phone);
+
+    expect(await getActiveGoal(phone)).toBeNull();
+    expect(await listDeposits(phone, goalId)).toEqual([]);
+    expect(await pendingChanges(phone)).toBe(0);
+    // Whoever signs in on this phone next must not receive any of it.
+    await syncOnce(phone, remote);
+    expect([...rows.keys()]).toEqual([]);
   });
 });
