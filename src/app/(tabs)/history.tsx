@@ -16,10 +16,11 @@ import { listBetween, type Tx } from '@/db/transactions';
 import { totals } from '@/lib/budget';
 import { categoryInfo } from '@/lib/categories';
 import { addMonths, dayHeading, endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
+import { matchesEntry, type HistoryFilter } from '@/lib/history-search';
 import { formatFigure } from '@/lib/money';
 import { colors, fonts, READABLE_MAX, useWide, WIDE_MARGIN } from '@/theme/tokens';
 
-type Filter = 'all' | 'expense' | 'income' | 'need' | 'want';
+type Filter = HistoryFilter;
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'expense', label: 'Spent' },
@@ -27,17 +28,6 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'need', label: 'Needs' },
   { value: 'want', label: 'Wants' },
 ];
-
-function matches(tx: Tx, filter: Filter, q: string, label: string): boolean {
-  if (filter === 'expense' && tx.type !== 'expense') return false;
-  if (filter === 'income' && tx.type !== 'income') return false;
-  if (filter === 'need' && (tx.type !== 'expense' || tx.need_cents <= 0)) return false;
-  if (filter === 'want' && (tx.type !== 'expense' || tx.want_cents <= 0)) return false;
-  if (!q) return true;
-  const amount = (tx.amount_cents / 100).toFixed(2);
-  const hay = `${tx.merchant ?? ''} ${tx.note ?? ''} ${label} ${amount}`.toLowerCase();
-  return hay.includes(q.toLowerCase());
-}
 
 export default function History() {
   const settings = useSettings();
@@ -117,7 +107,7 @@ function HistoryList({
   const sections = useMemo(() => {
     const byDay = new Map<string, Tx[]>();
     for (const tx of txs ?? []) {
-      if (!matches(tx, filter, query.trim(), categoryInfo(tx.category, custom).label)) continue;
+      if (!matchesEntry(tx, filter, query, categoryInfo(tx.category, custom).label)) continue;
       const list = byDay.get(tx.occurred_on) ?? [];
       list.push(tx);
       byDay.set(tx.occurred_on, list);
