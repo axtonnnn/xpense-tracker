@@ -17,13 +17,24 @@ const MONTH_TTL = 60 * 60 * 24 * 40;
 /** Fair-use caps per Pro account per calendar month (override with the PRO_MONTHLY_* vars). */
 const DEFAULT_CAPS: Record<Feature, number> = { scan: 300, check: 300, review: 30 };
 
-export function monthlyCap(env: Env, feature: Feature): number {
-  const raw = { scan: env.PRO_MONTHLY_SCANS, check: env.PRO_MONTHLY_CHECKS, review: env.PRO_MONTHLY_REVIEWS }[feature];
-  const n = Number(raw ?? DEFAULT_CAPS[feature]);
-  return Number.isFinite(n) ? n : DEFAULT_CAPS[feature];
+const DEFAULT_TRIAL_SCANS = 3;
+
+/**
+ * A count from a [vars] setting: a whole number of 0 or more. Anything else (blank, "three", "-1", "2.5")
+ * falls back to the default. Number() alone turns "" into 0 (every Pro request refused) and "three" into
+ * NaN (`used >= NaN` is never true, so free scans would never run out).
+ */
+export function countVar(raw: string | undefined, fallback: number): number {
+  const s = raw?.trim() ?? '';
+  return /^\d+$/.test(s) ? Number(s) : fallback;
 }
 
-export const trialLimit = (env: Env) => Number(env.FREE_TRIAL_SCANS ?? 3);
+export function monthlyCap(env: Env, feature: Feature): number {
+  const raw = { scan: env.PRO_MONTHLY_SCANS, check: env.PRO_MONTHLY_CHECKS, review: env.PRO_MONTHLY_REVIEWS }[feature];
+  return countVar(raw, DEFAULT_CAPS[feature]);
+}
+
+export const trialLimit = (env: Env) => countVar(env.FREE_TRIAL_SCANS, DEFAULT_TRIAL_SCANS);
 
 /** Whether Xpense Pro is on sale. Off (the default), nobody needs Pro and RevenueCat isn't used. */
 export const paymentsOn = (env: Env) => /^(on|true|1)$/i.test(env.PAYMENTS?.trim() ?? '');
@@ -122,8 +133,17 @@ export async function checkAccess(
 /**
  * Forgets an account: its usage counters, cached Pro status and its RevenueCat customer record.
  * (An App Store subscription itself is cancelled by the person in their Apple account.)
+ * Runs after the sign-in is gone, so it never throws: one failed step mustn't stop the other, or tell
+ * the person their account wasn't deleted when it was.
  */
 export async function forgetAccount(env: Env, userId: string, fetchImpl: typeof fetch): Promise<void> {
+  const steps = await Promise.allSettled([forgetCounters(env, userId), forgetCustomer(env, userId, fetchImpl)]);
+  for (const step of steps) {
+    if (step.status === 'rejected') console.error('[account] cleanup failed for', userId, step.reason);
+  }
+}
+
+async function forgetCounters(env: Env, userId: string): Promise<void> {
   for (const prefix of [`usage:${userId}:`, `trial:${userId}`, `pro:${userId}`]) {
     let cursor: string | undefined;
     do {
@@ -132,13 +152,15 @@ export async function forgetAccount(env: Env, userId: string, fetchImpl: typeof 
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
   }
-  if (env.REVENUECAT_SECRET_KEY) {
-    const res = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}`, Accept: 'application/json' },
-    });
-    if (!res.ok && res.status !== 404) console.error('[account] RevenueCat delete failed', res.status);
-  }
+}
+
+async function forgetCustomer(env: Env, userId: string, fetchImpl: typeof fetch): Promise<void> {
+  if (!env.REVENUECAT_SECRET_KEY) return;
+  const res = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}`, Accept: 'application/json' },
+  });
+  if (!res.ok && res.status !== 404) console.error('[account] RevenueCat delete failed for', userId, res.status);
 }
 
 /** Counts a successful AI call. Returns free scans left for trial users. */

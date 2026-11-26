@@ -21,6 +21,13 @@ export function dayLabel(iso: string, now = today()): string {
 export function DateSheet({ open, onClose, value, onChange }: { open: boolean; onClose: () => void; value: string; onChange: (iso: string) => void }) {
   const t = today();
   const [month, setMonth] = useState(startOfMonth(value));
+  // The sheet stays mounted between uses, so each time it opens, show the chosen day's month again
+  // rather than whichever month was browsed to last time.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setMonth(startOfMonth(value));
+  }
   const quick = [t, addDays(t, -1), addDays(t, -2)];
   const m = parseISODate(month);
   const lead = (m.getDay() + 6) % 7;

@@ -1,7 +1,7 @@
 // One entry, to read and change: used as its own screen on phones and beside the list on iPad and Mac.
 import { Image } from 'expo-image';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { CategorySheet } from './CategorySheet';
@@ -20,6 +20,7 @@ import { deleteTransaction, getTransaction, setItemNecessity, updateTransaction 
 import { categoryInfo, defaultNecessity, type CustomCategory } from '@/lib/categories';
 import { formatDay, isValidISODate } from '@/lib/dates';
 import { centsToInput, currencySymbol, formatFigure, parseAmount } from '@/lib/money';
+import { oneAtATime } from '@/lib/once';
 import { colors } from '@/theme/tokens';
 
 type Data = NonNullable<Awaited<ReturnType<typeof getTransaction>>>;
@@ -61,32 +62,52 @@ function EntryForm({ data, custom, onDone }: { data: Data; custom: CustomCategor
   const source = SOURCE[tx.source] ?? SOURCE.manual;
   const symbol = currencySymbol(tx.currency);
 
-  const save = async () => {
-    setError(null);
-    const cents = parseAmount(amount);
-    if (!cents || cents <= 0) {
-      haptic('warning');
-      return setError('Write an amount greater than zero.');
-    }
-    if (!isValidISODate(date)) return setError('Pick a valid date.');
-    await updateTransaction(db, tx.id, {
-      amountCents: cents,
-      merchant,
-      note,
-      category,
-      occurredOn: date,
-      ...(isExpense && !hasItems ? { necessity } : {}),
+  // One save or delete at a time: a double tap must not save twice and go back two screens.
+  const guard = useRef(oneAtATime()).current;
+  const [busy, setBusy] = useState(false);
+  const act = (work: () => Promise<void>, failure: string) =>
+    guard.run(async () => {
+      setBusy(true);
+      try {
+        await work();
+      } catch (e) {
+        console.warn('[entry]', e);
+        haptic('warning');
+        setError(failure);
+      } finally {
+        setBusy(false);
+      }
     });
-    toast({ message: 'Changes saved' });
-    onDone();
-  };
+
+  const save = () =>
+    act(async () => {
+      setError(null);
+      const cents = parseAmount(amount);
+      if (!cents || cents <= 0) {
+        haptic('warning');
+        return setError('Write an amount greater than zero.');
+      }
+      if (!isValidISODate(date)) return setError('Pick a valid date.');
+      await updateTransaction(db, tx.id, {
+        amountCents: cents,
+        merchant,
+        note,
+        category,
+        occurredOn: date,
+        ...(isExpense && !hasItems ? { necessity } : {}),
+      });
+      toast({ message: 'Changes saved' });
+      onDone();
+    }, 'Couldn’t save your changes. Please try again.');
 
   const remove = async () => {
-    if (await ask('Delete this entry?', 'It’s removed from all your devices, along with its receipt.', 'Delete entry')) {
+    if (guard.running) return;
+    if (!(await ask('Delete this entry?', 'It’s removed from all your devices, along with its receipt.', 'Delete entry'))) return;
+    await act(async () => {
       await deleteTransaction(db, tx.id);
       toast({ message: 'Entry deleted', quiet: true });
       onDone();
-    }
+    }, 'Couldn’t delete this entry. Please try again.');
   };
 
   return (
@@ -180,7 +201,7 @@ function EntryForm({ data, custom, onDone }: { data: Data; custom: CustomCategor
           </Notice>
         </Appear>
       )}
-      <Button title="Save changes" onPress={save} style={{ marginTop: 36 }} />
+      <Button title="Save changes" onPress={save} loading={busy} style={{ marginTop: 36 }} />
       <TextLink label="Delete entry" danger onPress={remove} style={{ alignSelf: 'center', marginTop: 8 }} />
 
       <CategorySheet

@@ -308,7 +308,8 @@ export async function deleteAllData(db: SQLiteDatabase): Promise<string[]> {
   );
   await inTransaction(db, async () => {
     await db.execAsync(
-      `DELETE FROM transactions; DELETE FROM receipt_items; DELETE FROM receipts; DELETE FROM recurring; DELETE FROM settings;
+      `DELETE FROM transactions; DELETE FROM receipt_items; DELETE FROM receipts; DELETE FROM recurring;
+       DELETE FROM goal_deposits; DELETE FROM goals; DELETE FROM settings;
        DELETE FROM sync_deletes; DELETE FROM sync_state;`,
     );
   });

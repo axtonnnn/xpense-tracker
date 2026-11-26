@@ -13,7 +13,9 @@ import { listRecurring } from '@/db/recurring';
 import { useSettings } from '@/db/settings';
 import { listBetween } from '@/db/transactions';
 import { budgetContext } from '@/lib/ai-context';
+import { answerCache } from '@/lib/answer-cache';
 import { ApiError, checkPurchase, NeedsProError } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { hourlyRateCents, hoursOfWork, safeToSpend } from '@/lib/budget';
 import { PAYMENTS } from '@/lib/config';
 import { endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
@@ -25,13 +27,14 @@ import { colors } from '@/theme/tokens';
 const VERDICT = { go: 'Go for it', wait: 'Sleep on it', skip: 'Probably skip' } as const;
 
 // Answers for this session, so coming back doesn't ask the AI again.
-const answers = new Map<string, CheckResult>();
+const answers = answerCache<CheckResult>();
 
 export default function BuyCheck() {
   const params = useLocalSearchParams<{ item?: string; price?: string }>();
   const settings = useSettings();
   const goal = useActiveGoal();
   const requirePro = useRequirePro();
+  const account = useAuth().user?.id;
   const t = today();
   const monthStart = startOfMonth(t);
   const monthEnd = endOfMonth(t);
@@ -70,7 +73,7 @@ export default function BuyCheck() {
     }
     const key = `${item.trim().toLowerCase()}|${cents}|${t.slice(0, 7)}`;
     setAsked({ item: item.trim(), cents });
-    const cached = answers.get(key);
+    const cached = answers.get(account, key);
     if (cached) return setResult(cached);
     setResult(null);
     setBusy(true);
@@ -83,7 +86,7 @@ export default function BuyCheck() {
         goal: goal ? { name: goal.goal.name, target_cents: goal.goal.target_cents, saved: goal.saved } : null,
       });
       const answer = await checkPurchase({ item: item.trim(), price: fromCents(cents), currency: settings.currency, budget });
-      answers.set(key, answer);
+      answers.set(account, key, answer);
       haptic('success');
       setResult(answer);
     } catch (e) {

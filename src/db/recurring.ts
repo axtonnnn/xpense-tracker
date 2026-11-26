@@ -39,6 +39,8 @@ export async function addRecurring(
     note?: string | null;
     cadence: Cadence;
     startOn: string;
+    /** The day the repeat is pinned to, when it isn't `startOn` (a bill due on the 31st that first repeats on Feb 28). */
+    anchorOn?: string;
   },
 ): Promise<string> {
   const id = newId();
@@ -54,7 +56,7 @@ export async function addRecurring(
     r.type === 'income' ? null : r.necessity,
     r.note?.trim() || null,
     r.cadence,
-    r.startOn,
+    r.anchorOn ?? r.startOn,
     r.startOn,
     now,
     now,

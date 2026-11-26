@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { ReceiptResult } from '../../shared/schemas';
 import { scanReceipt } from './api';
 import { today } from './dates';
+import { requestLocale } from './locale';
 import { draftFromAI, type ReceiptDraft } from './receipt';
 
 // Claude reads images up to ~1568px on the long edge without downscaling; bigger only costs more.
@@ -48,7 +49,7 @@ export async function runScan(
   ctx: { currency: string },
 ): Promise<{ id: string; trialRemaining: number | null }> {
   const { uri, base64 } = await prepareImage(asset);
-  const locale = Intl.DateTimeFormat().resolvedOptions().locale ?? 'en-US';
+  const locale = requestLocale(Intl.DateTimeFormat().resolvedOptions().locale);
   const res = await scanReceipt({ image_base64: base64, media_type: 'image/jpeg', currency: ctx.currency, locale, today: today() });
   const id = `${Date.now()}`;
   pending.set(id, {

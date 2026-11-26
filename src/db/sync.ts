@@ -102,6 +102,19 @@ async function setCursor(db: SQLiteDatabase, value: string): Promise<void> {
   await db.runAsync("INSERT INTO sync_state (key, value) VALUES ('cursor', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", value);
 }
 
+/**
+ * A repeating paycheck or bill this device booked itself and nobody has edited since. Every device books
+ * the same occurrence under the same id, so a newer copy of it is a re-booking, not a change of mind.
+ */
+async function isUntouchedBooking(db: SQLiteDatabase, r: RemoteRecord): Promise<boolean> {
+  if (r.kind !== 'transaction') return false;
+  const row = await db.getFirstAsync<{ source: string; created_at: string; updated_at: string }>(
+    'SELECT source, created_at, updated_at FROM transactions WHERE id = ?',
+    r.id,
+  );
+  return !!row && row.source === 'recurring' && row.created_at === row.updated_at;
+}
+
 async function applyRecord(db: SQLiteDatabase, r: RemoteRecord, images: string[]): Promise<boolean> {
   const t = TABLES[r.kind];
   if (!t) return false;
@@ -109,8 +122,9 @@ async function applyRecord(db: SQLiteDatabase, r: RemoteRecord, images: string[]
   const local = await db.getFirstAsync<{ updated_at: string; dirty: number }>(`SELECT updated_at, dirty FROM ${t.name} WHERE ${t.key} = ?`, r.id);
   const pending = !!(await db.getFirstAsync('SELECT 1 FROM sync_deletes WHERE kind = ? AND id = ?', r.kind, r.id));
   const remoteAt = normalizeTime(r.updated_at);
-  // A deletion stamped the same moment as the row it deletes still deletes it.
-  if (r.deleted && local && !pending && remoteAt >= normalizeTime(local.updated_at)) {
+  // A deletion stamped the same moment as the row it deletes still deletes it. So does a deletion of a
+  // repeating entry this device only booked again (same rule:date id, never edited) after it was deleted.
+  if (r.deleted && local && !pending && (remoteAt >= normalizeTime(local.updated_at) || (await isUntouchedBooking(db, r)))) {
     if (r.kind === 'receipt') {
       const img = await db.getFirstAsync<{ image_uri: string | null }>('SELECT image_uri FROM receipts WHERE id = ?', r.id);
       if (img?.image_uri) images.push(img.image_uri);
@@ -233,14 +247,33 @@ const PAGE = 1000;
 export function supabaseRemote(client: SupabaseClient, userId: string): Remote {
   return {
     async pull(since) {
+      // Pages pick up from the last server time seen, not from a row count. A record another device
+      // changes mid-pull jumps to the end of the list, and counting rows would then skip the one that
+      // slid into its place (for good, on a first sync). Each page starts at the previous page's last
+      // time (inclusive, so records sharing that time aren't lost) and repeats are dropped.
       const out: RemoteRecord[] = [];
-      for (let from = 0; ; from += PAGE) {
+      const seen = new Set<string>();
+      let after = since;
+      let inclusive = false;
+      for (;;) {
         let q = client.from('records').select('kind, id, data, deleted, updated_at, synced_at').eq('user_id', userId);
-        if (since) q = q.gt('synced_at', since);
-        const { data, error } = await q.order('synced_at', { ascending: true }).range(from, from + PAGE - 1);
+        if (after) q = inclusive ? q.gte('synced_at', after) : q.gt('synced_at', after);
+        const { data, error } = await q.order('synced_at', { ascending: true }).limit(PAGE);
         if (error) throw new Error(error.message);
-        out.push(...((data ?? []) as RemoteRecord[]));
-        if (!data || data.length < PAGE) return out;
+        const page = (data ?? []) as RemoteRecord[];
+        let fresh = 0;
+        for (const r of page) {
+          const key = `${r.kind}\u0000${r.id}\u0000${r.synced_at}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(r);
+          fresh++;
+        }
+        // A short page is the end. A page of nothing new (a whole page sharing one server time, which
+        // clock_timestamp() makes all but impossible) stops rather than asking forever.
+        if (page.length < PAGE || fresh === 0 || !page[page.length - 1].synced_at) return out;
+        after = page[page.length - 1].synced_at!;
+        inclusive = true;
       }
     },
     async push(records) {

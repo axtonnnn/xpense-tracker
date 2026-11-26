@@ -11,6 +11,7 @@ import type { Necessity } from '../../shared/schemas';
 import type { Tx } from '@/db/transactions';
 import type { SafeToSpend } from '@/lib/budget';
 import { categoryInfo, type CustomCategory } from '@/lib/categories';
+import { goalPercent } from '@/lib/goal';
 import { formatFigure, formatMoney, splitMoney } from '@/lib/money';
 import { colors, fonts, motion, type as typeScale } from '@/theme/tokens';
 
@@ -223,7 +224,7 @@ export function GoalBar({
 }) {
   const fraction = target > 0 ? Math.min(1, saved / target) : 0;
   const fill = useFill(fraction, { delay: 120 });
-  const pct = Math.round(fraction * 100);
+  const pct = target > 0 ? goalPercent(saved, target) : 0;
   const labels = scale ?? goalTicks(target, currency);
   return (
     <View>
