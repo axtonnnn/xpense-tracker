@@ -58,6 +58,20 @@ describe('categorize', () => {
     expect(categorize(text)).toMatchObject({ category, necessity });
   });
 
+  it('treats accented letters as part of a word', () => {
+    expect(categorize('Café Nero')).toMatchObject({ category: 'dining', matched: 'café' });
+    expect(categorize('café')).toMatchObject({ category: 'dining', matched: 'café' });
+    expect(categorize('Barça shop')).toBeNull();
+    expect(categorize('Señor Taco')).toMatchObject({ category: 'dining', matched: 'taco' });
+  });
+
+  it('only matches whole words', () => {
+    expect(categorize('barber')).toMatchObject({ category: 'personal_care', matched: 'barber' });
+    expect(categorize('Publix')).toMatchObject({ category: 'groceries' });
+    expect(categorize('Disney+')).toMatchObject({ category: 'subscriptions' });
+    expect(categorize('H&M')).toMatchObject({ category: 'shopping', matched: 'h&m' });
+  });
+
   it('returns null when unsure', () => {
     expect(categorize('Bob')).toBeNull();
     expect(categorize('  ')).toBeNull();
