@@ -17,13 +17,24 @@ const MONTH_TTL = 60 * 60 * 24 * 40;
 /** Fair-use caps per Pro account per calendar month (override with the PRO_MONTHLY_* vars). */
 const DEFAULT_CAPS: Record<Feature, number> = { scan: 300, check: 300, review: 30 };
 
-export function monthlyCap(env: Env, feature: Feature): number {
-  const raw = { scan: env.PRO_MONTHLY_SCANS, check: env.PRO_MONTHLY_CHECKS, review: env.PRO_MONTHLY_REVIEWS }[feature];
-  const n = Number(raw ?? DEFAULT_CAPS[feature]);
-  return Number.isFinite(n) ? n : DEFAULT_CAPS[feature];
+const DEFAULT_TRIAL_SCANS = 3;
+
+/**
+ * A count from a [vars] setting: a whole number of 0 or more. Anything else (blank, "three", "-1", "2.5")
+ * falls back to the default. Number() alone turns "" into 0 (every Pro request refused) and "three" into
+ * NaN (`used >= NaN` is never true, so free scans would never run out).
+ */
+export function countVar(raw: string | undefined, fallback: number): number {
+  const s = raw?.trim() ?? '';
+  return /^\d+$/.test(s) ? Number(s) : fallback;
 }
 
-export const trialLimit = (env: Env) => Number(env.FREE_TRIAL_SCANS ?? 3);
+export function monthlyCap(env: Env, feature: Feature): number {
+  const raw = { scan: env.PRO_MONTHLY_SCANS, check: env.PRO_MONTHLY_CHECKS, review: env.PRO_MONTHLY_REVIEWS }[feature];
+  return countVar(raw, DEFAULT_CAPS[feature]);
+}
+
+export const trialLimit = (env: Env) => countVar(env.FREE_TRIAL_SCANS, DEFAULT_TRIAL_SCANS);
 
 /** Whether Xpense Pro is on sale. Off (the default), nobody needs Pro and RevenueCat isn't used. */
 export const paymentsOn = (env: Env) => /^(on|true|1)$/i.test(env.PAYMENTS?.trim() ?? '');
