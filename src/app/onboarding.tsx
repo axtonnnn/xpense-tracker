@@ -14,13 +14,15 @@ import { setSettings } from '@/db/settings';
 import { useUser } from '@/lib/auth';
 import { addMonths, parseISODate, startOfMonth, today } from '@/lib/dates';
 import { arrivalMonth, monthName } from '@/lib/goal';
+import { localeRegion } from '@/lib/locale';
 import { CURRENCIES, currencySymbol, formatMoney, parseAmount } from '@/lib/money';
 import { colors, motion } from '@/theme/tokens';
 
 function guessCurrency(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale ?? '';
-    const region = locale.split('-').pop()?.toUpperCase();
+    // A tag with no region ("de") falls back to its language, as it always has.
+    const region = localeRegion(locale) ?? locale.split('-')[0]?.toUpperCase();
     const map: Record<string, string> = {
       US: 'USD', GB: 'GBP', CA: 'CAD', AU: 'AUD', IN: 'INR', JP: 'JPY', MX: 'MXN', BR: 'BRL', NG: 'NGN', ZA: 'ZAR', PH: 'PHP',
       DE: 'EUR', FR: 'EUR', ES: 'EUR', IT: 'EUR', NL: 'EUR', IE: 'EUR',
