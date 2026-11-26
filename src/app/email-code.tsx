@@ -20,6 +20,10 @@ export default function EmailCode() {
   const [wrong, setWrong] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wait, setWait] = useState(RESEND_AFTER_S);
+  // A ref as well as state: two quick taps both run before a re-render, and a second request inside the
+  // server's rate limit would fail with "Too many tries" even though the first code was sent.
+  const sendingRef = useRef(false);
+  const [sending, setSending] = useState(false);
   const [shakeStyle, shake] = useShake();
 
   useEffect(() => {
@@ -58,6 +62,9 @@ export default function EmailCode() {
   };
 
   const resend = async () => {
+    if (sendingRef.current || busy) return;
+    sendingRef.current = true;
+    setSending(true);
     setError(null);
     try {
       await sendEmailCode(email);
@@ -67,6 +74,9 @@ export default function EmailCode() {
     } catch (e) {
       haptic('warning');
       setError(e instanceof AuthError ? e.message : 'Couldn’t send a new code. Please try again.');
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   };
 
@@ -137,7 +147,9 @@ export default function EmailCode() {
       )}
 
       <View style={styles.more}>
-        {wait > 0 && !error ? (
+        {sending ? (
+          <AppText muted>Sending a new code…</AppText>
+        ) : wait > 0 && !error ? (
           <AppText muted>
             Send a new code in <AppText variant="mono">0:{String(wait).padStart(2, '0')}</AppText>
           </AppText>
