@@ -10,7 +10,7 @@ import { CountUp, GoalBar, Panel } from './money-ui';
 import { Sheet } from './Sheet';
 import { useToast } from './Toast';
 import { AmountField, AppText, Button, Chip, Field, haptic, SectionHeader, TextLink } from './ui';
-import { addDeposit, deleteDeposit, type Goal, type GoalState } from '@/db/goals';
+import { addDeposit, answerCheckin, deleteDeposit, type Goal, type GoalState } from '@/db/goals';
 import { setSettings } from '@/db/settings';
 import { endOfMonth, parseISODate, startOfMonth, today } from '@/lib/dates';
 import { arrivalMonth, extraFor, movesBetween, monthName, type Checkin } from '@/lib/goal';
@@ -109,11 +109,19 @@ export function CheckinPanel({ checkin, goal, currency, onOther }: { checkin: Ch
   const month = monthOf(checkin.month);
   const amount = formatMoney(checkin.amount, currency, { compact: true });
   const key = checkin.month.slice(0, 7);
+  const [busy, setBusy] = useState(false);
   const yes = async () => {
-    // Dated in the month it belongs to, so it counts as that month's set-aside.
-    await addDeposit(db, { goalId: goal.id, amountCents: checkin.amount, occurredOn: endOfMonth(checkin.month), note: `${month}’s set-aside` });
-    await setSettings(db, { goal_checkin: key });
-    toast({ message: `${amount} added to your ${goalWords(goal.name).fund}` });
+    if (busy) return;
+    setBusy(true);
+    try {
+      const added = await answerCheckin(db, { goalId: goal.id, month: checkin.month, amountCents: checkin.amount, note: `${month}’s set-aside` });
+      if (added) toast({ message: `${amount} added to your ${goalWords(goal.name).fund}` });
+    } catch {
+      haptic('warning');
+      toast({ message: 'Couldn’t add it to your goal. Please try again.', quiet: true });
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <Panel style={{ marginTop: 28 }}>
@@ -127,8 +135,8 @@ export function CheckinPanel({ checkin, goal, currency, onOther }: { checkin: Ch
         Add it to your {goalWords(goal.name).fund} so the goal shows what you really have.
       </AppText>
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
-        <Button compact title={`Yes, add ${amount}`} onPress={yes} style={{ flex: 1, paddingHorizontal: 8 }} />
-        <Button compact kind="secondary" title="Other amount" onPress={onOther} style={{ flex: 1, paddingHorizontal: 8 }} />
+        <Button compact title={`Yes, add ${amount}`} onPress={yes} loading={busy} style={{ flex: 1, paddingHorizontal: 8 }} />
+        <Button compact kind="secondary" title="Other amount" onPress={onOther} disabled={busy} style={{ flex: 1, paddingHorizontal: 8 }} />
       </View>
       <TextLink
         label="Not this month"
