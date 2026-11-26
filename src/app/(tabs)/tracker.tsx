@@ -29,8 +29,8 @@ import { useSettings } from '@/db/settings';
 import { deleteTransaction, insertTransaction, type TxType } from '@/db/transactions';
 import { hourlyRateCents, hoursOfWork } from '@/lib/budget';
 import { categoryInfo, defaultNecessity } from '@/lib/categories';
-import { categorize } from '@/lib/categorize';
 import { formatDay, isValidISODate, today } from '@/lib/dates';
+import { guessFromMerchant, type Picked } from '@/lib/guess';
 import { currencySymbol, formatFigure, formatMoney, parseAmount } from '@/lib/money';
 import { usePro, useRequirePro } from '@/lib/pro';
 import { CADENCE_LABEL, type Cadence } from '@/lib/recurring';
@@ -61,6 +61,7 @@ export default function Tracker() {
   const [necessity, setNecessity] = useState<Necessity>('need');
   const [pickedByHand, setPickedByHand] = useState(false);
   const [guessedFrom, setGuessedFrom] = useState<string | null>(null);
+  const [beforeGuess, setBeforeGuess] = useState<Picked | null>(null);
   // null means "today", worked out when it's needed: this tab stays open for days while the app sleeps.
   const [pickedDate, setPickedDate] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -82,6 +83,7 @@ export default function Tracker() {
     setNecessity('need');
     setPickedByHand(false);
     setGuessedFrom(null);
+    setBeforeGuess(null);
     setError(null);
   };
 
@@ -99,17 +101,17 @@ export default function Tracker() {
   const onMerchant = (text: string) => {
     setMerchant(text);
     if (type !== 'expense' || pickedByHand) return;
-    const guess = categorize(text);
-    setGuessedFrom(guess ? guess.matched : null);
-    if (guess) {
-      setCategory(guess.category);
-      setNecessity(guess.necessity);
-    }
+    const next = guessFromMerchant({ category, necessity, guessedFrom, beforeGuess }, text);
+    setCategory(next.category);
+    setNecessity(next.necessity);
+    setGuessedFrom(next.guessedFrom);
+    setBeforeGuess(next.beforeGuess);
   };
 
   const pickCategory = (id: string, nec?: Necessity) => {
     setCategory(id);
     setPickedByHand(true);
+    setBeforeGuess(null);
     if (type === 'expense') setNecessity(nec ?? defaultNecessity(id, custom));
   };
 
@@ -161,6 +163,7 @@ export default function Tracker() {
       setPickedDate(null);
       setPickedByHand(false);
       setGuessedFrom(null);
+      setBeforeGuess(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save. Please try again.');
     } finally {
@@ -218,7 +221,14 @@ export default function Tracker() {
 
       {type === 'expense' && (
         <View style={{ marginTop: 28 }}>
-          <NeedWantCards value={necessity} onChange={setNecessity} />
+          <NeedWantCards
+            value={necessity}
+            onChange={(n) => {
+              // Chosen by hand: a guess that stops matching later doesn't undo it.
+              setNecessity(n);
+              setBeforeGuess(null);
+            }}
+          />
         </View>
       )}
 
