@@ -38,7 +38,7 @@ AI = "off"
 PRO_PRICES = "$2.99 a month or $19.99 a year"
 
 # Accounts: your Supabase project URL (Project Settings → API). Sign-in tokens are checked against it.
-SUPABASE_URL = "REPLACE with your Supabase project URL, e.g. https://abcd1234.supabase.co"
+SUPABASE_URL = "https://dwdmypcgfcqmdzbslrpw.supabase.co"
 
 FREE_TRIAL_SCANS = "3"
 # Fair-use caps per account per calendar month (for everyone while payments are off, for Pro after). At max effort each scan costs ≈ $0.002–0.008,
