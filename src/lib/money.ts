@@ -53,10 +53,11 @@ function formatter(currency: string, compact: boolean): Intl.NumberFormat {
   let f = formatters.get(key);
   if (!f) {
     try {
+      // Full amounts keep the currency's own decimals: 2 for USD, none for JPY ("¥33,333", not "¥33,333.33").
       f = new Intl.NumberFormat(undefined, {
         style: 'currency',
         currency,
-        maximumFractionDigits: compact ? 0 : 2,
+        maximumFractionDigits: compact ? 0 : undefined,
         minimumFractionDigits: compact ? 0 : undefined,
       });
     } catch {
