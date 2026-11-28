@@ -20,10 +20,10 @@ fallthrough = true
 
 [vars]
 # Shown on the /privacy, /terms and /support pages. Fill these in before you publish.
-OWNER_NAME = "REPLACE with your name or company"
-CONTACT_EMAIL = "REPLACE with your support email"
-GOVERNING_LAW = "REPLACE with your country or state, e.g. the State of California, USA"
-LAST_UPDATED = "REPLACE with the date you publish, e.g. 1 November 2026"
+OWNER_NAME = "Black Tiger"
+CONTACT_EMAIL = "help@rmembered.com"
+GOVERNING_LAW = "the State of California, USA"
+LAST_UPDATED = "28 November 2026"
 # Optional: once the app is live, its store links add download buttons to the home page.
 APP_STORE_URL = ""
 PLAY_STORE_URL = ""
