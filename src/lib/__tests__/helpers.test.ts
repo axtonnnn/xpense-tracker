@@ -15,6 +15,16 @@ describe('parseAmount', () => {
     ['1.234,56', 123456],
     ['$ 9.99', 999],
     ['0.1', 10],
+    ['1,500', 150000],
+    ['1.500', 150000],
+    ['2.500', 250000],
+    ['€ 1.500', 150000],
+    ['1.500.000', 150000000],
+    ['12.345', 1234500],
+    ['0.500', 50],
+    ['1.50', 150],
+    ['1.5', 150],
+    ['1.234.567,89', 123456789],
   ])('%s → %i cents', (input, cents) => {
     expect(parseAmount(input)).toBe(cents);
   });
@@ -35,6 +45,10 @@ describe('parseOptionalAmount', () => {
     expect(parseOptionalAmount('0')).toBe(0);
     expect(parseOptionalAmount('2,400.50')).toBe(240050);
     expect(parseOptionalAmount('$ 300')).toBe(30000);
+  });
+
+  it('reads a round amount written with dots for thousands', () => {
+    expect(parseOptionalAmount('2.500')).toBe(250000);
   });
 
   it('rejects typos and negative amounts instead of saving them', () => {

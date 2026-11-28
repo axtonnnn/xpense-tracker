@@ -10,7 +10,11 @@ export function fromCents(cents: number): number {
   return cents / 100;
 }
 
-/** Parses user input such as "12", "12.5", "1,234.56" or "12,50" into cents. Returns null if invalid. */
+/**
+ * Parses user input such as "12", "12.5", "1,234.56", "12,50" or "1.500" into cents. Returns null if invalid.
+ * A comma or dot followed by exactly three digits groups thousands ("1,500" and "1.500" are both 1500), the
+ * way people who write "1.500,00" type a round amount.
+ */
 export function parseAmount(input: string): number | null {
   let s = input.trim().replace(/[^\d.,-]/g, '');
   if (!s) return null;
@@ -20,6 +24,9 @@ export function parseAmount(input: string): number | null {
     // "1.234,56" or "12,50": comma is the decimal separator if followed by 1-2 digits
     const decimals = s.length - lastComma - 1;
     s = decimals <= 2 ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  } else if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(s)) {
+    // "1.500" or "2.500.000": dots grouping thousands, not a decimal point (that would round away a digit).
+    s = s.replace(/\./g, '');
   } else {
     s = s.replace(/,/g, '');
   }
